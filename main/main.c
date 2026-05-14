@@ -245,34 +245,71 @@ double mt6701_a_start_read(i2c_master_dev_handle_t dev_handle) {
     return a_start;
 }
 
+void mt6701_log_eeprom(i2c_master_dev_handle_t dev_handle) {
+    ESP_LOGI(TAG,
+        "\n=== EEPROM ===\nUVW_MUX: %u\nABZ_MUX: %u\nDIR: %u\nUVW_RES: %u\nABZ_RES: %u\nHYST: %.2f\nZ_PULSE_WIDTH: %u\nZERO: %.3f\nPWM_FREQ: %u\nPWM_POL: %u\nOUT_MODE: %u\nA_STOP_READ: %.3f\nA_START_READ: %.3f",
+        mt6701_uvw_mux_read(dev_handle),
+        mt6701_abz_mux_read(dev_handle),
+        mt6701_dir_read(dev_handle),
+        mt6701_uvw_res_read(dev_handle),
+        mt6701_abz_res_read(dev_handle),
+        mt6701_hyst_read(dev_handle),
+        mt6701_z_pulse_width_read(dev_handle),
+        mt6701_zero_read(dev_handle),
+        mt6701_pwm_freq_read(dev_handle),
+        mt6701_pwm_pol_read(dev_handle),
+        mt6701_out_mode_read(dev_handle),
+        mt6701_a_stop_read(dev_handle),
+        mt6701_a_start_read(dev_handle)
+    );
+}
+
 void mt6701_eeprom_write_wait() {
     vTaskDelay(pdMS_TO_TICKS(MT6701_EEPROM_WRITE_WAIT_MS));
+}
+
+void mt6701_reg_write(i2c_master_dev_handle_t dev_handle, uint8_t *data, size_t len) {
+    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_transmit(dev_handle, data, len, I2C_MASTER_TIMEOUT_MS));
+    
+    uint8_t prog_key[2] = {0x09, 0xB3};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_transmit(dev_handle, prog_key, 2, I2C_MASTER_TIMEOUT_MS));
+    uint8_t prog_cmd[2] = {0x0A, 0x05};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_transmit(dev_handle, prog_cmd, 2, I2C_MASTER_TIMEOUT_MS));
+
+    mt6701_eeprom_write_wait();
+}
+
+void mt6701_abz_res_write(i2c_master_dev_handle_t dev_handle, uint16_t data) {
+    uint8_t reg_addr = 0x30;
+    uint8_t data_old[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, data_old, 2));
+
+    data = data - 1;
+    uint8_t ms_byte = (uint8_t)(data >> 8);
+    uint8_t ls_byte = (uint8_t)(data & 0xFF);
+
+    uint8_t data_new[3] = {
+        reg_addr,
+        ms_byte,
+        ls_byte
+    };
+
+    mt6701_reg_write(dev_handle, data_new, 3);
 }
 
 void app_main(void) {
     i2c_master_bus_handle_t bus_handle;
     i2c_master_dev_handle_t dev_handle;
     i2c_master_init(&bus_handle, &dev_handle);
-    
-    uint16_t res = mt6701_abz_res_read(dev_handle);
-    ESP_LOGI(TAG, "%u", res);
 
-    uint8_t reg_addr = 0x30;
-    uint8_t data[2] = {0};
-    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, data, 2));
+    mt6701_log_eeprom(dev_handle);
 
-    mt6701_eeprom_write_wait();
-
-    uint8_t buff[3] = {reg_addr, data[0], data[1]};
-    buff[2] ^= (-0 ^ buff[2]) & (1 << 0);
-    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_transmit(dev_handle, buff, 3, I2C_MASTER_TIMEOUT_MS));
-    
-    uint8_t key[2] = {0x09, 0xB3};
-    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_transmit(dev_handle, key, 2, I2C_MASTER_TIMEOUT_MS));
-    uint8_t cmd[2] = {0x0A, 0x05};
-    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_transmit(dev_handle, cmd, 2, I2C_MASTER_TIMEOUT_MS));
-    
-    mt6701_eeprom_write_wait();
+    //uint16_t res = mt6701_abz_res_read(dev_handle);
+    //ESP_LOGI(TAG, "%u", res);
+    //
+    //mt6701_eeprom_write_wait();
+    //
+    //mt6701_abz_res_write(dev_handle, (uint16_t)1024);
 
     ESP_ERROR_CHECK(i2c_master_bus_rm_device(dev_handle));
     ESP_ERROR_CHECK(i2c_del_master_bus(bus_handle));
