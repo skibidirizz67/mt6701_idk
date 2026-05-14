@@ -1,6 +1,7 @@
 #include "driver/i2c_types.h"
 #include "driver/i2c_master.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -11,6 +12,8 @@
 #define I2C_MASTER_TIMEOUT_MS 1000
 
 #define MT6701_ADDR 0x06
+
+#define MT6701_EEPROM_WRITE_WAIT_MS 650
 
 static const char* TAG = "MT6701";
 
@@ -242,13 +245,34 @@ double mt6701_a_start_read(i2c_master_dev_handle_t dev_handle) {
     return a_start;
 }
 
+void mt6701_eeprom_write_wait() {
+    vTaskDelay(pdMS_TO_TICKS(MT6701_EEPROM_WRITE_WAIT_MS));
+}
+
 void app_main(void) {
     i2c_master_bus_handle_t bus_handle;
     i2c_master_dev_handle_t dev_handle;
     i2c_master_init(&bus_handle, &dev_handle);
     
-    double res = mt6701_a_start_read(dev_handle);
-    ESP_LOGI(TAG, "%f", res);
+    uint16_t res = mt6701_abz_res_read(dev_handle);
+    ESP_LOGI(TAG, "%u", res);
+
+    uint8_t reg_addr = 0x30;
+    uint8_t data[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, data, 2));
+
+    mt6701_eeprom_write_wait();
+
+    uint8_t buff[3] = {reg_addr, data[0], data[1]};
+    buff[2] ^= (-0 ^ buff[2]) & (1 << 0);
+    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_transmit(dev_handle, buff, 3, I2C_MASTER_TIMEOUT_MS));
+    
+    uint8_t key[2] = {0x09, 0xB3};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_transmit(dev_handle, key, 2, I2C_MASTER_TIMEOUT_MS));
+    uint8_t cmd[2] = {0x0A, 0x05};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_transmit(dev_handle, cmd, 2, I2C_MASTER_TIMEOUT_MS));
+    
+    mt6701_eeprom_write_wait();
 
     ESP_ERROR_CHECK(i2c_master_bus_rm_device(dev_handle));
     ESP_ERROR_CHECK(i2c_del_master_bus(bus_handle));
