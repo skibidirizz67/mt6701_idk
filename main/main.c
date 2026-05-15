@@ -47,6 +47,18 @@ uint8_t mt6701_uvw_mux_read(i2c_master_dev_handle_t dev_handle) {
     return out;
 }
 
+void mt6701_uvw_mux_write(i2c_master_dev_handle_t dev_handle, uint8_t value) {
+    uint8_t reg_addr = 0x25;
+    uint8_t buff[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 1));
+
+    buff[0] = reg_addr;
+    // XXXXXXXD
+    buff[1] = (buff[1] & 0xFE) | (value & 0x01);
+
+    mt6701_reg_write(dev_handle, buff, 2);
+}
+
 uint8_t mt6701_abz_mux_read(i2c_master_dev_handle_t dev_handle) {
     uint8_t reg_addr = 0x29;
     uint8_t buff[1] = {0};
@@ -56,6 +68,18 @@ uint8_t mt6701_abz_mux_read(i2c_master_dev_handle_t dev_handle) {
     uint8_t out = (buff[0] & 0x02) >> 1;
 
     return out;
+}
+
+void mt6701_abz_mux_write(i2c_master_dev_handle_t dev_handle, uint8_t value) {
+    uint8_t reg_addr = 0x29;
+    uint8_t buff[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 1));
+
+    buff[0] = reg_addr;
+    // XXXXXXDX
+    buff[1] = (buff[1] & 0xFD) | (value & 0x02);
+
+    mt6701_reg_write(dev_handle, buff, 2);
 }
 
 uint8_t mt6701_dir_read(i2c_master_dev_handle_t dev_handle) {
@@ -69,6 +93,18 @@ uint8_t mt6701_dir_read(i2c_master_dev_handle_t dev_handle) {
     return out;
 }
 
+void mt6701_dir_write(i2c_master_dev_handle_t dev_handle, uint8_t value) {
+    uint8_t reg_addr = 0x29;
+    uint8_t buff[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 1));
+
+    buff[0] = reg_addr;
+    // XDXXXXXX
+    buff[1] = (buff[1] & 0xBF) | ((value & 0x40) << 6);
+
+    mt6701_reg_write(dev_handle, buff, 2);
+}
+
 uint8_t mt6701_uvw_res_read(i2c_master_dev_handle_t dev_handle) {
     uint8_t reg_addr = 0x30;
     uint8_t buff[1] = {0};
@@ -79,6 +115,18 @@ uint8_t mt6701_uvw_res_read(i2c_master_dev_handle_t dev_handle) {
     out = out + 1;
 
     return out;
+}
+
+void mt6701_uvw_res_write(i2c_master_dev_handle_t dev_handle, uint8_t value) {
+    uint8_t reg_addr = 0x30;
+    uint8_t buff[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 1));
+
+    buff[0] = reg_addr;
+    // XXXXDDDD
+    buff[1] = (buff[1] & 0xF0) | (value & 0x0F);
+
+    mt6701_reg_write(dev_handle, buff, 2);
 }
 
 uint16_t mt6701_abz_res_read(i2c_master_dev_handle_t dev_handle) {
@@ -147,6 +195,36 @@ double mt6701_hyst_read(i2c_master_dev_handle_t dev_handle) {
     return out;
 }
 
+// write is split in order to not wear-out unused middle byte
+void mt6701_hyst_write(i2c_master_dev_handle_t dev_handle, double value) {
+    uint8_t reg_addr = 0x32;
+    uint8_t buff[4] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 3));
+
+    uint8_t code = 0;
+
+    if (value == 1.0) code = 0;
+    else if (value == 2.0) code = 1;
+    else if (value == 4.0) code = 2;
+    else if (value == 8.0) code = 3;
+    else if (value == 0.0) code = 4;
+    else if (value == 0.25) code = 5;
+    else if (value == 0.5) code = 6;
+    else if (value == 1.0) code = 7;
+
+    buff[0] = reg_addr;
+    // XXXXXXXD
+    buff[1] = (buff[1] & 0xFE) | ((code >> 2) & 0x01);
+
+    mt6701_reg_write(dev_handle, buff, 2);
+
+    buff[0] = reg_addr + 2;
+    // XXXXXXDD
+    buff[1] = (buff[3] & 0xFC) | (code & 0x03);
+
+    mt6701_reg_write(dev_handle, buff, 2);
+}
+
 uint8_t mt6701_z_pulse_width_read(i2c_master_dev_handle_t dev_handle) {
     uint8_t reg_addr = 0x32;
     uint8_t buff[1] = {0};
@@ -186,16 +264,55 @@ uint8_t mt6701_z_pulse_width_read(i2c_master_dev_handle_t dev_handle) {
     return out;
 }
 
+void mt6701_z_pulse_width_write(i2c_master_dev_handle_t dev_handle, uint8_t value) {
+    uint8_t reg_addr = 0x32;
+    uint8_t buff[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 1));
+
+    uint8_t code = 0;
+
+    if (value == 1) code = 0;
+    else if (value == 2) code = 1;
+    else if (value == 4) code = 2;
+    else if (value == 8) code = 3;
+    else if (value == 12) code = 4;
+    else if (value == 16) code = 5;
+    else if (value == 180) code = 6;
+    else if (value == 1) code = 7;
+
+    buff[0] = reg_addr;
+    // XXXXDDDX
+    buff[1] = (buff[1] & 0xF1) | ((code << 1) & 0x0E);
+
+    mt6701_reg_write(dev_handle, buff, 2);
+}
+
 double mt6701_zero_read(i2c_master_dev_handle_t dev_handle) {
     uint8_t reg_addr = 0x32;
     uint8_t buff[2] = {0};
     ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff, 2));
 
     // DDDDXXXX DDDDDDDD
-    double out = ((buff[0] & 0xF0) >> 4) | buff[1];
-    out = out * 0.078;
+    uint16_t code = ((uint16_t)(buff[0] & 0xF0) >> 4) | buff[1];
+    
+    double out = code * 0.078;
 
     return out;
+}
+
+void mt6701_zero_write(i2c_master_dev_handle_t dev_handle, double value) {
+    uint8_t reg_addr = 0x32;
+    uint8_t buff[3] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 2));
+
+    uint16_t code = (uint16_t)(value / 0.078);
+
+    buff[0] = reg_addr;
+    // DDDDXXXX DDDDDDDD
+    buff[1] = (buff[1] & 0x3F) | (uint8_t)(((code & 0xFF) << 4) & 0xF0); // #TODO remove 0xFF as redundant
+    buff[2] = (uint8_t)(code & 0xFF);
+
+    mt6701_reg_write(dev_handle, buff, 3);
 }
 
 uint8_t mt6701_pwm_freq_read(i2c_master_dev_handle_t dev_handle) {
@@ -209,6 +326,18 @@ uint8_t mt6701_pwm_freq_read(i2c_master_dev_handle_t dev_handle) {
     return out;
 }
 
+void mt6701_pwm_freq_write(i2c_master_dev_handle_t dev_handle, uint8_t value) {
+    uint8_t reg_addr = 0x38;
+    uint8_t buff[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 1));
+
+    buff[0] = reg_addr;
+    // XXXXXXXD
+    buff[1] = (buff[1] & 0xFE) | (value & 0x01);
+
+    mt6701_reg_write(dev_handle, buff, 2);
+}
+
 uint8_t mt6701_pwm_pol_read(i2c_master_dev_handle_t dev_handle) {
     uint8_t reg_addr = 0x38;
     uint8_t buff[1] = {0};
@@ -218,6 +347,18 @@ uint8_t mt6701_pwm_pol_read(i2c_master_dev_handle_t dev_handle) {
     uint8_t out = buff[0] & 0x02;
 
     return out;
+}
+
+void mt6701_pwm_pol_write(i2c_master_dev_handle_t dev_handle, uint8_t value) {
+    uint8_t reg_addr = 0x38;
+    uint8_t buff[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 1));
+
+    buff[0] = reg_addr;
+    // XXXXXXDX
+    buff[1] = (buff[1] & 0xFD) | (value & 0x02);
+
+    mt6701_reg_write(dev_handle, buff, 2);
 }
 
 uint8_t mt6701_out_mode_read(i2c_master_dev_handle_t dev_handle) {
@@ -231,16 +372,50 @@ uint8_t mt6701_out_mode_read(i2c_master_dev_handle_t dev_handle) {
     return out;
 }
 
+void mt6701_out_mode_write(i2c_master_dev_handle_t dev_handle, uint8_t value) {
+    uint8_t reg_addr = 0x38;
+    uint8_t buff[2] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 1));
+
+    buff[0] = reg_addr;
+    // XXXXXDXX
+    buff[1] = (buff[1] & 0xFB) | (value & 0x04);
+
+    mt6701_reg_write(dev_handle, buff, 2);
+}
+
 double mt6701_a_stop_read(i2c_master_dev_handle_t dev_handle) {
     uint8_t reg_addr = 0x3E;
     uint8_t buff[3] = {0};
     ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff, 3));
 
     // XXXXDDDD XXXXXXXX DDDDDDDD
-    double out = ((buff[0] & 0x0F) << 8) | buff[2];
-    out = out * 0.078;
+    uint16_t code = ((uint8_t)(buff[0] & 0x0F) << 8) | buff[2];
+
+    double out = code * 0.078;
 
     return out;
+}
+
+// write is split in order to not wear-out unused middle byte
+void mt6701_a_stop_write(i2c_master_dev_handle_t dev_handle, double value) {
+    uint8_t reg_addr = 0x3E;
+    uint8_t buff[4] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 3));
+
+    uint16_t code = (uint16_t)(value / 0.078);
+
+    buff[0] = reg_addr;
+    // XXXXDDDD
+    buff[1] = (buff[1] & 0xF0) | ((code >> 8) & 0x0F);
+
+    mt6701_reg_write(dev_handle, buff, 2);
+
+    buff[0] = reg_addr + 2;
+    // DDDDDDDD
+    buff[1] = buff[3];
+
+    mt6701_reg_write(dev_handle, buff, 2);
 }
 
 double mt6701_a_start_read(i2c_master_dev_handle_t dev_handle) {
@@ -248,11 +423,29 @@ double mt6701_a_start_read(i2c_master_dev_handle_t dev_handle) {
     uint8_t buff[2] = {0};
     ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff, 2));
 
+    uint16_t code = ((uint16_t)(buff[0] & 0xF0) >> 4) | buff[1];
+
     // DDDDXXXX DDDDDDDD
-    double out = ((buff[0] & 0xF0) >> 4) | buff[1];
-    out = out * 0.078;
+    double out = code * 0.078;
 
     return out;
+}
+
+void mt6701_a_start_write(i2c_master_dev_handle_t dev_handle, double value) {
+    uint8_t reg_addr = 0x3E;
+    uint8_t buff[3] = {0};
+    ESP_ERROR_CHECK_WITHOUT_ABORT(mt6701_reg_read(dev_handle, reg_addr, buff + 1, 2));
+
+    uint16_t code = (uint16_t)(value / 0.078);
+
+    buff[1] = (buff[1] & 0xF0) | ((code >> 8) & 0x0F);
+
+    buff[0] = reg_addr;
+    // DDDDXXXX DDDDDDDD
+    buff[1] = (buff[1] & 0x0F) | (uint8_t)((code << 4) & 0xF0);
+    buff[2] = (uint8_t)(code & 0xFF);
+
+    mt6701_reg_write(dev_handle, buff, 3);
 }
 
 void mt6701_log_eeprom(i2c_master_dev_handle_t dev_handle) {
@@ -303,7 +496,11 @@ void app_main(void) {
 
     mt6701_eeprom_write_wait();
 
-    //mt6701_abz_res_write(dev_handle, 512);
+    mt6701_a_stop_write(dev_handle, 69.69);
+
+    mt6701_eeprom_write_wait();
+
+    mt6701_log_eeprom(dev_handle);
 
     ESP_ERROR_CHECK(i2c_master_bus_rm_device(dev_handle));
     ESP_ERROR_CHECK(i2c_del_master_bus(bus_handle));
