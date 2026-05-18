@@ -22,6 +22,8 @@ const char *err_missing_arg = "   Missing argument";
 
 i2c_master_dev_handle_t dev_handle;
 
+MTEntry mttable[CONFIG_CNT];
+
 StringView sv(const char *str) {
     return (StringView) {
         .data = str,
@@ -113,6 +115,25 @@ void printpad(const char *str, size_t col) {
     else {
         putchar(' ');
     }
+}
+
+MTOpts lu_se(StringView *sv) {
+    if (sv_scmp(sv, "sensor")) return SENSOR;
+    else if (sv_scmp(sv, "EEPROM")) return EEPROM;
+    else if (sv_scmp(sv, "UVW_MUX")) return UVW_MUX;
+    else if (sv_scmp(sv, "ABZ_MUX")) return ABZ_MUX;
+    else if (sv_scmp(sv, "DIR")) return SDIR;
+    else if (sv_scmp(sv, "UVW_RES")) return UVW_RES;
+    else if (sv_scmp(sv, "ABZ_RES")) return ABZ_RES;
+    else if (sv_scmp(sv, "HYST")) return HYST;
+    else if (sv_scmp(sv, "Z_PULSE_WIDTH")) return Z_PULSE_WIDTH;
+    else if (sv_scmp(sv, "ZERO")) return ZERO;
+    else if (sv_scmp(sv, "PWM_FREQ")) return PWM_FREQ;
+    else if (sv_scmp(sv, "PWM_POL")) return PWM_POL;
+    else if (sv_scmp(sv, "OUT_MODE")) return OUT_MODE;
+    else if (sv_scmp(sv, "A_START")) return A_START;
+    else if (sv_scmp(sv, "A_STOP")) return A_STOP;
+    return 0;
 }
 
 void exec_help(StringView *argv, size_t argc) {
@@ -263,46 +284,23 @@ void exec_read(StringView *argv, size_t argc) {
             printf("%s: %.*s\n", err_invalid_arg, argv[1].count, argv[1].data);
             return;
         }
-        
     }
 
     if (raw) {
-        if (sv_scmp(opt, "sensor")) printf("   mt6701_sensor_read_raw call stub\n");
-        else if (sv_scmp(opt, "EEPROM")) printf("   mt6701_eeprom_read_raw call stub\n");
-        else if (sv_scmp(opt, "UVW_MUX")) printf("   mt6701_uvw_mux_read_raw call stub\n");
-        else if (sv_scmp(opt, "ABZ_MUX")) printf("   mt6701_abz_mux_read_raw call stub\n");
-        else if (sv_scmp(opt, "DIR")) printf("   mt6701_dir_read_raw call stub\n");
-        else if (sv_scmp(opt, "UVW_RES")) printf("   mt6701_uvw_res_read_raw call stub\n");
-        else if (sv_scmp(opt, "ABZ_RES")) printf("   mt6701_abz_res_read_raw call stub\n");
-        else if (sv_scmp(opt, "HYST")) printf("   mt6701_hyst_read_raw call stub\n");
-        else if (sv_scmp(opt, "Z_PULSE_WIDTH")) printf("   mt6701_z_pulse_width_read_raw call stub\n");
-        else if (sv_scmp(opt, "ZERO")) printf("   mt6701_uvw_zero_raw call stub\n");
-        else if (sv_scmp(opt, "PWM_FREQ")) printf("   mt6701_pwm_freq_read_raw call stub\n");
-        else if (sv_scmp(opt, "PWM_POL")) printf("   mt6701_pwm_pol_read_raw call stub\n");
-        else if (sv_scmp(opt, "OUT_MODE")) printf("   mt6701_out_mode_read_raw call stub\n");
-        else if (sv_scmp(opt, "A_START")) printf("   mt6701_a_start_read_raw call stub\n");
-        else if (sv_scmp(opt, "A_STOP")) printf("   mt6701_a_stop_read_raw call stub\n");
-        else printf("%s: %.*s\n", err_invalid_arg, opt->count, opt->data);
+        MTOpts mtopt = lu_se(opt);
+        if (mtopt == ERR_INVALID_OPT) {
+            printf("%s: %.*s\n", err_invalid_arg, opt->count, opt->data);
+            return;
+        }
+        printf("   0x%04X\n", (uint16_t)mttable[lu_se(opt)].read_raw(dev_handle));
     }
     else {
-        if (sv_scmp(opt, "sensor")) printf("   mt6701_sensor_read call stub\n");
-        else if (sv_scmp(opt, "EEPROM")) printf("   mt6701_eeprom_read call stub\n");
-        else if (sv_scmp(opt, "UVW_MUX")) printf("   mt6701_uvw_mux_read call stub\n");
-        else if (sv_scmp(opt, "ABZ_MUX")) printf("   mt6701_abz_mux_read call stub\n");
-        else if (sv_scmp(opt, "DIR")) printf("   mt6701_dir_read call stub\n");
-        else if (sv_scmp(opt, "UVW_RES")) printf("   mt6701_uvw_res_read call stub\n");
-        else if (sv_scmp(opt, "ABZ_RES")) {
-            printf("   %d\n", mt6701_abz_res_read(dev_handle));
+        MTOpts mtopt = lu_se(opt);
+        if (mtopt == ERR_INVALID_OPT) {
+            printf("%s: %.*s\n", err_invalid_arg, opt->count, opt->data);
+            return;
         }
-        else if (sv_scmp(opt, "HYST")) printf("   mt6701_hyst_read call stub\n");
-        else if (sv_scmp(opt, "Z_PULSE_WIDTH")) printf("   mt6701_z_pulse_width_read call stub\n");
-        else if (sv_scmp(opt, "ZERO")) printf("   mt6701_uvw_zero call stub\n");
-        else if (sv_scmp(opt, "PWM_FREQ")) printf("   mt6701_pwm_freq_read call stub\n");
-        else if (sv_scmp(opt, "PWM_POL")) printf("   mt6701_pwm_pol_read call stub\n");
-        else if (sv_scmp(opt, "OUT_MODE")) printf("   mt6701_out_mode_read call stub\n");
-        else if (sv_scmp(opt, "A_START")) printf("   mt6701_a_start_read call stub\n");
-        else if (sv_scmp(opt, "A_STOP")) printf("   mt6701_a_stop_read call stub\n");
-        else printf("%s: %.*s\n", err_invalid_arg, opt->count, opt->data);
+        printf("   %f.3\n", mttable[lu_se(opt)].read(dev_handle));
     }
 }
 
@@ -310,8 +308,8 @@ void exec_monitor(StringView *argv, size_t argc) {
     StringView *opt = NULL;
     long delay_ms = 500;
     int raw = 0;
-    uint16_t (*read_raw_func)() = NULL;
-    double (*read_func)() = NULL;
+    uint16_t (*read_raw_func)(i2c_master_dev_handle_t) = NULL;
+    double (*read_func)(i2c_master_dev_handle_t) = NULL;
 
     if (argc < 1) {
         printf("%s: %s\n", err_missing_arg, "<sensor>");
@@ -338,10 +336,10 @@ void exec_monitor(StringView *argv, size_t argc) {
 
     if (sv_scmp(opt, "sensor")) {
         if (raw) {
-            // read_raw_func = &mt6701_sensor_read_raw;
+            read_raw_func = &mt6701_sensor_read_raw;
         }
         else {
-            // read_func = &mt6701_sensor_read;
+            read_func = &mt6701_sensor_read;
         }
     }
     else {
@@ -351,13 +349,17 @@ void exec_monitor(StringView *argv, size_t argc) {
 
     while (1) {
         int c = getchar();
-
         if (c == '\n' || c == '\r') {
             break;
         }
 
         // read_raw_func();
-        printf("   stub\n");
+        if (raw) {
+            printf("   0x%04X\n", read_raw_func(dev_handle));
+        }
+        else {
+            printf("   %f\n", read_func(dev_handle));
+        }
         vTaskDelay(pdMS_TO_TICKS(delay_ms));
     }
 }
@@ -368,11 +370,9 @@ void exec_set(StringView *argv, size_t argc) {
     StringView slice = {0};
     int raw = 0;
     double vald = 0;
-    uint16_t (*read_raw_func)() = NULL;
-    double (*read_func)() = NULL;
 
-    if (argc < 2) {
-        printf("%s: %s\n", err_missing_arg, "<option> or <value>");
+    if (argc < 1) {
+        printf("%s: <option>\n", err_missing_arg);
         return;
     }
     else if (argc > 3) {
@@ -381,7 +381,10 @@ void exec_set(StringView *argv, size_t argc) {
     }
 
     opt = &argv[0];
-    val = &argv[1];
+    
+    if (argc > 1) {
+        val = &argv[1];
+    }
 
     if (argc == 3) {
         if (sv_scmp(&argv[2], "--raw")) {
@@ -391,6 +394,35 @@ void exec_set(StringView *argv, size_t argc) {
             printf("%s: %.*s\n", err_invalid_arg, argv[2].count, argv[2].data);
             return;
         }
+    }
+
+    if (sv_scmp(opt, "apply")) {
+        for (size_t i = 0; i < CONFIG_CNT; i++) {
+            SetBuff *ewbo = &mttable[i].ewb;
+            if (ewbo->mod == 1) {
+                MTOpts mtopt = lu_se(opt);
+                if (raw) {
+                    if (mtopt == ERR_INVALID_OPT) {
+                        printf("%s: %.*s\n", err_invalid_arg, opt->count, opt->data);
+                        return;
+                    }
+                    mttable[lu_se(opt)].write_raw(dev_handle, (uint16_t)ewbo->v);
+                }
+                else {
+                    if (mtopt == ERR_INVALID_OPT) {
+                        printf("%s: %.*s\n", err_invalid_arg, opt->count, opt->data);
+                        return;
+                    }
+                    mttable[lu_se(opt)].write_raw(dev_handle, ewbo->v);
+                }
+            }
+        }
+        return;
+    }
+
+    if (!val) {
+        printf("%s: <value>\n", err_missing_arg);
+        return;
     }
 
     slice = *val;
@@ -419,38 +451,12 @@ void exec_set(StringView *argv, size_t argc) {
         return;
     }
 
-    if (raw) {
-        if (sv_scmp(opt, "UVW_MUX")) printf("   mt6701_uvw_mux_set_raw call stub\n");
-        else if (sv_scmp(opt, "ABZ_MUX")) printf("   mt6701_abz_mux_set_raw call stub\n");
-        else if (sv_scmp(opt, "DIR")) printf("   mt6701_dir_set_raw call stub\n");
-        else if (sv_scmp(opt, "UVW_RES")) printf("   mt6701_uvw_res_set_raw call stub\n");
-        else if (sv_scmp(opt, "ABZ_RES")) printf("   mt6701_abz_res_set_raw call stub\n");
-        else if (sv_scmp(opt, "HYST")) printf("   mt6701_hyst_set_raw call stub\n");
-        else if (sv_scmp(opt, "Z_PULSE_WIDTH")) printf("   mt6701_z_pulse_width_set_raw call stub\n");
-        else if (sv_scmp(opt, "ZERO")) printf("   mt6701_uvw_zero_raw call stub\n");
-        else if (sv_scmp(opt, "PWM_FREQ")) printf("   mt6701_pwm_freq_set_raw call stub\n");
-        else if (sv_scmp(opt, "PWM_POL")) printf("   mt6701_pwm_pol_set_raw call stub\n");
-        else if (sv_scmp(opt, "OUT_MODE")) printf("   mt6701_out_mode_set_raw call stub\n");
-        else if (sv_scmp(opt, "A_START")) printf("   mt6701_a_start_set_raw call stub\n");
-        else if (sv_scmp(opt, "A_STOP")) printf("   mt6701_a_stop_set_raw call stub\n");
-        else printf("%s: %.*s\n", err_invalid_arg, opt->count, opt->data);
-    }
-    else {
-        if (sv_scmp(opt, "UVW_MUX")) printf("   mt6701_uvw_mux_set call stub\n");
-        else if (sv_scmp(opt, "ABZ_MUX")) printf("   mt6701_abz_mux_set call stub\n");
-        else if (sv_scmp(opt, "DIR")) printf("   mt6701_dir_set call stub\n");
-        else if (sv_scmp(opt, "UVW_RES")) printf("   mt6701_uvw_res_set call stub\n");
-        else if (sv_scmp(opt, "ABZ_RES")) printf("   mt6701_abz_res_set call stub\n");
-        else if (sv_scmp(opt, "HYST")) printf("   mt6701_hyst_set call stub\n");
-        else if (sv_scmp(opt, "Z_PULSE_WIDTH")) printf("   mt6701_z_pulse_width_set call stub\n");
-        else if (sv_scmp(opt, "ZERO")) printf("   mt6701_uvw_zero call stub\n");
-        else if (sv_scmp(opt, "PWM_FREQ")) printf("   mt6701_pwm_freq_set call stub\n");
-        else if (sv_scmp(opt, "PWM_POL")) printf("   mt6701_pwm_pol_set call stub\n");
-        else if (sv_scmp(opt, "OUT_MODE")) printf("   mt6701_out_mode_set call stub\n");
-        else if (sv_scmp(opt, "A_START")) printf("   mt6701_a_start_set call stub\n");
-        else if (sv_scmp(opt, "A_STOP")) printf("   mt6701_a_stop_set call stub\n");
-        else printf("%s: %.*s\n", err_invalid_arg, opt->count, opt->data);
-    }
+    MTOpts mtopt = lu_se(opt);
+    mttable[mtopt].ewb = (SetBuff){
+        .v = vald,
+        .raw = raw,
+        .mod = 1,
+    };
 }
 
 void exec_quit(StringView *argv, size_t argc) {
@@ -530,57 +536,142 @@ void start_cli(i2c_master_dev_handle_t adev_handle) {
     };
     size_t cmdc = sizeof(cmdv) / sizeof(cmdv[0]);
 
+    mttable[UVW_MUX] = (MTEntry){
+        .name = sv("UVW_MUX"),
+        .read_raw = &mt6701_uvw_mux_read_raw,
+        .read = &mt6701_uvw_mux_read,
+        .write_raw = &mt6701_uvw_mux_write_raw,
+        .write = &mt6701_uvw_mux_write,
+    };
+    mttable[ABZ_MUX] = (MTEntry){
+        .name = sv("ABZ_MUX"),
+        .read_raw = &mt6701_abz_mux_read_raw,
+        .read = &mt6701_abz_mux_read,
+        .write_raw = &mt6701_abz_mux_write_raw,
+        .write = &mt6701_abz_mux_write,
+    };
+    mttable[SDIR] = (MTEntry){
+        .name = sv("DIR"),
+        .read_raw = &mt6701_dir_read_raw,
+        .read = &mt6701_dir_read,
+        .write_raw = &mt6701_dir_write_raw,
+        .write = &mt6701_dir_write,
+    };
+    mttable[UVW_RES] = (MTEntry){
+        .name = sv("UVW_RES"),
+        .read_raw = &mt6701_uvw_res_read_raw,
+        .read = &mt6701_uvw_res_read,
+        .write_raw = &mt6701_uvw_res_write_raw,
+        .write = &mt6701_uvw_res_write,
+    };
+    mttable[ABZ_RES] = (MTEntry){
+        .name = sv("ABZ_RES"),
+        .read_raw = &mt6701_abz_res_read_raw,
+        .read = &mt6701_abz_res_read,
+        .write_raw = &mt6701_abz_res_write_raw,
+        .write = &mt6701_abz_res_write,
+    };
+    mttable[HYST] = (MTEntry){
+        .name = sv("HYST"),
+        .read_raw = &mt6701_hyst_read_raw,
+        .read = &mt6701_hyst_read,
+        .write_raw = &mt6701_hyst_write_raw,
+        .write = &mt6701_hyst_write,
+    };
+    mttable[Z_PULSE_WIDTH] = (MTEntry){
+        .name = sv("Z_PULSE_WIDTH"),
+        .read_raw = &mt6701_z_pulse_width_read_raw,
+        .read = &mt6701_z_pulse_width_read,
+        .write_raw = &mt6701_z_pulse_width_write_raw,
+        .write = &mt6701_z_pulse_width_write,
+    };
+    mttable[ZERO] = (MTEntry){
+        .name = sv("ZERO"),
+        .read_raw = &mt6701_zero_read_raw,
+        .read = &mt6701_zero_read,
+        .write_raw = &mt6701_zero_write_raw,
+        .write = &mt6701_zero_write,
+    };
+    mttable[PWM_FREQ] = (MTEntry){
+        .name = sv("PWM_FREQ"),
+        .read_raw = &mt6701_pwm_freq_read_raw,
+        .read = &mt6701_pwm_freq_read,
+        .write_raw = &mt6701_pwm_freq_write_raw,
+        .write = &mt6701_pwm_freq_write,
+    };
+    mttable[PWM_POL] = (MTEntry){
+        .name = sv("PWM_POL"),
+        .read_raw = &mt6701_pwm_pol_read_raw,
+        .read = &mt6701_pwm_pol_read,
+        .write_raw = &mt6701_pwm_pol_write_raw,
+        .write = &mt6701_pwm_pol_write,
+    };
+    mttable[OUT_MODE] = (MTEntry){
+        .name = sv("OUT_MODE"),
+        .read_raw = &mt6701_out_mode_read_raw,
+        .read = &mt6701_out_mode_read,
+        .write_raw = &mt6701_out_mode_write_raw,
+        .write = &mt6701_out_mode_write,
+    };
+    mttable[A_START] = (MTEntry){
+        .name = sv("A_START"),
+        .read_raw = &mt6701_a_start_read_raw,
+        .read = &mt6701_a_start_read,
+        .write_raw = &mt6701_a_start_write_raw,
+        .write = &mt6701_a_start_write,
+    };
+    mttable[A_STOP] = (MTEntry){
+        .name = sv("A_STOP"),
+        .read_raw = &mt6701_a_stop_read_raw,
+        .read = &mt6701_a_stop_read,
+        .write_raw = &mt6701_a_stop_write_raw,
+        .write = &mt6701_a_stop_write,
+    };
+    mttable[SENSOR] = (MTEntry){
+        .name = sv("SENSOR"),
+        .read_raw = &mt6701_sensor_read_raw,
+        .read = &mt6701_sensor_read,
+    };
+
     char buff[256];
     size_t cap = 0;
     size_t len = 0;
 
-    fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
-
     dev_handle = adev_handle;
+
+    for (size_t i = 0; i < CONFIG_CNT; i++) {
+        mttable[i].ewb = (SetBuff){0};
+    }
+
+    fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 
     printf("[mt6701]> ");
 
     while (1) {
-
         int c = getchar();
-
         if (c == EOF) {
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
-
         if (c == '\r' || c == '\n') {
-
             putchar('\n');
-
             buff[len] = '\0';
-
             if (len > 0) {
                 parse(buff, cmdv, cmdc);
             }
-
             len = 0;
-
             printf("[mt6701]> ");
-
             continue;
         }
-
         if (c == '\b' || c == 127) {
-
             if (len > 0) {
                 len--;
-
                 printf("\b \b");
             }
-
             continue;
         }
-
         if (len < sizeof(buff) - 1) {
-
             buff[len++] = (char)c;
-
             putchar(c);
         }
     }
