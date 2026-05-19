@@ -692,7 +692,7 @@ void mt6701_a_start_write(i2c_master_dev_handle_t dev_handle, double value) {
     mt6701_a_start_write_raw(dev_handle, code);
 }
 
-void mt6701_log_eeprom(i2c_master_dev_handle_t dev_handle) {
+double mt6701_log_eeprom(i2c_master_dev_handle_t dev_handle) {
     ESP_LOGI(TAG,
         "\n=== EEPROM ===\nUVW_MUX: %u\nABZ_MUX: %u\nDIR: %u\nUVW_RES: %u\nABZ_RES: %u\nHYST: %.2f\nZ_PULSE_WIDTH: %u\nZERO: %.3f\nPWM_FREQ: %u\nPWM_POL: %u\nOUT_MODE: %u\nA_STOP_READ: %.3f\nA_START_READ: %.3f",
         mt6701_uvw_mux_read(dev_handle),
@@ -709,6 +709,7 @@ void mt6701_log_eeprom(i2c_master_dev_handle_t dev_handle) {
         mt6701_a_stop_read(dev_handle),
         mt6701_a_start_read(dev_handle)
     );
+    return 0;
 }
 
 void i2c_master_init(i2c_master_bus_handle_t *bus_handle, i2c_master_dev_handle_t *dev_handle) {
