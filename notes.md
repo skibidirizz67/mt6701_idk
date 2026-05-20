@@ -64,3 +64,11 @@ reboot encoder:
 
 
 
+UART
+no parity
+8 bits
+115200
+1 stop bit
+aka 8N1
+
+flow control?
