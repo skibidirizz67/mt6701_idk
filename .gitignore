@@ -3,3 +3,7 @@ sshkey
 sshkey.pub
 .clangd
 .cache
+.vscode
+sdkconfig.old
+sdkconfig.tmp
+sdkconfig.rename.*
