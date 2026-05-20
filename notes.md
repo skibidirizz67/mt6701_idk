@@ -1,74 +1,20 @@
-read sensor                     0x00
-start monitor sensor            0x01
-stop monitor sensor             0x02
-read config                     0x03
-write config                    0x04
-reboot encoder (apply config)   0x05
+=== UART binary protocol sketch ===
 
+Parameters: 8N1
 
+Layout:
+[HDR][CMD][RSP][LEN][PLD][CRC]
 
-[HDR][CMD][STS][LEN][PLD][CRC]
+Description of each chunk:
+name    bytes   description
+===========================
+HDR     1       packet header (0x69)
+CMD     1       command id
+RSP     1       response code
+LEN     1       payload size (from 0 to 255)
+PLD     LEN     payload, contents determined by CMD
+CRC     2       CRC16-CCITT checksum
 
-HDR   header
-CMD   command id
-STS   response status
-LEN   payload len
-PLD   payload
-CRC   checksum
-
-
-
-REQUEST EXAMPLES
-
-read sensor:
-[0x69][0x00][0x00][0x00][][CRC]
-
-start monitor sensor:
-[0x69][0x01][0x00][0x00][][CRC]
-
-stop monitor sensor:
-[0x69][0x02][0x00][0x00][][CRC]
-
-read config:
-[0x69][0x03][0x00][0x01][0x30][CRC]
-
-write config:
-[0x69][0x04][0x00][0x05][0x30|0xAAAA][CRC]
-
-reboot encoder:
-[0x69][0x05][0x00][0x00][][CRC]
-
-
-
-RESPONSE EXAMPLES
-
-read sensor:
-[0x69][0x00][0x01][0x04][0xAAAA][CRC]
-
-start monitor sensor:
-[0x69][0x01][0x01][0x04][0xAAAA][CRC]
-
-stop monitor sensor:
-[0x69][0x02][0x01][0x00][][CRC]
-
-read config:
-[0x69][0x03][0x01][0x05][0x30|0xAAAA][CRC]
-
-write config:
-[0x69][0x04][0x01][0x05][0x30|0xAAAA][CRC]
-
-reboot encoder:
-[0x69][0x05][0x01][0x00][][CRC]
-
-
-
-
-
-UART
-no parity
-8 bits
-115200
-1 stop bit
-aka 8N1
-
-flow control?
+sequence / id
+rsp
+ack

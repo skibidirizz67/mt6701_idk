@@ -59,6 +59,19 @@ bool append_crc(uint8_t *buff, size_t len) {
     return true;
 }
 
+typedef struct {
+    uint8_t hdr;
+    uint8_t cmd;
+    uint8_t rsp;
+    uint8_t len;
+    uint8_t *pld;
+    uint16_t crc;
+} Packet;
+
+bool parse_packet(uint8_t buff, size_t buff_len, Packet *packet) {
+    return false;
+}
+
 void rx_task(void *arg) {
     uint8_t *buff = (uint8_t*)malloc(UART_RX_BUFF_SIZE);
     while (1) {
@@ -66,6 +79,8 @@ void rx_task(void *arg) {
         if (buff_len > 0) {
             ESP_LOGI(TAG, "RX task received %d bytes:", buff_len);
             ESP_LOG_BUFFER_HEXDUMP(TAG, buff, buff_len, ESP_LOG_INFO);
+
+            uint16_t rxcksum = 0;
         }
     }
 }
