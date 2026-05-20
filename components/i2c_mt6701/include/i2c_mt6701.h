@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-static esp_err_t mt6701_reg_read(i2c_master_dev_handle_t dev_handle, uint8_t reg_addr, uint8_t *buff, size_t size);
+esp_err_t mt6701_reg_read(i2c_master_dev_handle_t dev_handle, uint8_t reg_addr, uint8_t *buff, size_t size);
 void mt6701_eeprom_write_wait();
 void mt6701_reg_write(i2c_master_dev_handle_t dev_handle, uint8_t *buff, size_t size);
 

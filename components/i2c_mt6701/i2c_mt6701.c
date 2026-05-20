@@ -20,7 +20,7 @@
 
 static const char* TAG = "MT6701";
 
-static esp_err_t mt6701_reg_read(i2c_master_dev_handle_t dev_handle, uint8_t reg_addr, uint8_t *buff, size_t size) {
+esp_err_t mt6701_reg_read(i2c_master_dev_handle_t dev_handle, uint8_t reg_addr, uint8_t *buff, size_t size) {
     return i2c_master_transmit_receive(dev_handle, &reg_addr, 1, buff, size, I2C_MASTER_TIMEOUT_MS);
 }
 
