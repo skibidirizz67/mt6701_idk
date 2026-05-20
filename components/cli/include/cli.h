@@ -3,7 +3,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
-#include <ctype.h>
 #include <limits.h>
 #include "driver/i2c_types.h"
 
@@ -90,4 +89,4 @@ typedef struct {
     unsigned flags;
 } ParsedCommand;
 
-void start_cli(i2c_master_dev_handle_t adev_handle);
+void start_cli(i2c_master_dev_handle_t dev_handle);

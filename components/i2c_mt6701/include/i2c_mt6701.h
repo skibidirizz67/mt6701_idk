@@ -1,8 +1,5 @@
 #include "driver/i2c_types.h"
-#include "driver/i2c_master.h"
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include <stddef.h>
+#include "esp_err.h"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -78,11 +75,10 @@ void mt6701_a_start_write_raw(i2c_master_dev_handle_t dev_handle, uint16_t value
 double mt6701_a_start_read(i2c_master_dev_handle_t dev_handle);
 void mt6701_a_start_write(i2c_master_dev_handle_t dev_handle, double value);
 
-//void mt6701_log_eeprom_raw(i2c_master_dev_handle_t dev_handle);
-void i2c_master_init_raw(i2c_master_bus_handle_t *bus_handle, i2c_master_dev_handle_t *dev_handle);
+uint16_t mt6701_log_eeprom_raw(i2c_master_dev_handle_t dev_handle);
 double mt6701_log_eeprom(i2c_master_dev_handle_t dev_handle);
-void i2c_master_init(i2c_master_bus_handle_t *bus_handle, i2c_master_dev_handle_t *dev_handle);
 
+void i2c_master_init(i2c_master_bus_handle_t *bus_handle, i2c_master_dev_handle_t *dev_handle);
 void i2c_mt6701_init(i2c_master_bus_handle_t *bus_handle, i2c_master_dev_handle_t *dev_handle);
 void i2c_mt6701_terminate(i2c_master_dev_handle_t *dev_handle, i2c_master_bus_handle_t *bus_handle);
 void i2c_mt6701_init(i2c_master_bus_handle_t *bus_handle, i2c_master_dev_handle_t *dev_handle);

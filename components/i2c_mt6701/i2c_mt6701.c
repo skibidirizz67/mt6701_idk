@@ -1,7 +1,7 @@
 #include "driver/i2c_types.h"
 #include "driver/i2c_master.h"
 #include "esp_log.h"
-#include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -692,9 +692,34 @@ void mt6701_a_start_write(i2c_master_dev_handle_t dev_handle, double value) {
     mt6701_a_start_write_raw(dev_handle, code);
 }
 
+uint16_t mt6701_log_eeprom_raw(i2c_master_dev_handle_t dev_handle) {
+    ESP_LOGI(TAG,
+        "\n=== EEPROM ===\nUVW_MUX: 0x%04X\nABZ_MUX: 0x%04X\nDIR: 0x%04X\n"
+        "UVW_RES: 0x%04X\nABZ_RES: 0x%04X\nHYST: 0x%04X\nZ_PULSE_WIDTH: 0x%04X\n"
+        "ZERO: 0x%04X\nPWM_FREQ: 0x%04X\nPWM_POL: 0x%04X\nOUT_MODE: 0x%04X\n"
+        "A_STOP_READ: 0x%04X\nA_START_READ: 0x%04X",
+        mt6701_uvw_mux_read_raw(dev_handle),
+        mt6701_abz_mux_read_raw(dev_handle),
+        mt6701_dir_read_raw(dev_handle),
+        mt6701_uvw_res_read_raw(dev_handle),
+        mt6701_abz_res_read_raw(dev_handle),
+        mt6701_hyst_read_raw(dev_handle),
+        mt6701_z_pulse_width_read_raw(dev_handle),
+        mt6701_zero_read_raw(dev_handle),
+        mt6701_pwm_freq_read_raw(dev_handle),
+        mt6701_pwm_pol_read_raw(dev_handle),
+        mt6701_out_mode_read_raw(dev_handle),
+        mt6701_a_stop_read_raw(dev_handle),
+        mt6701_a_start_read_raw(dev_handle)
+    );
+    return 0;
+}
 double mt6701_log_eeprom(i2c_master_dev_handle_t dev_handle) {
     ESP_LOGI(TAG,
-        "\n=== EEPROM ===\nUVW_MUX: %u\nABZ_MUX: %u\nDIR: %u\nUVW_RES: %u\nABZ_RES: %u\nHYST: %.2f\nZ_PULSE_WIDTH: %u\nZERO: %.3f\nPWM_FREQ: %u\nPWM_POL: %u\nOUT_MODE: %u\nA_STOP_READ: %.3f\nA_START_READ: %.3f",
+        "\n=== EEPROM ===\nUVW_MUX: 0x%04X\nABZ_MUX: 0x%04X\nDIR: 0x%04X\n"
+        "UVW_RES: 0x%04X\nABZ_RES: 0x%04X\nHYST: 0x%04X\nZ_PULSE_WIDTH: 0x%04X\n"
+        "ZERO: 0x%04X\nPWM_FREQ: 0x%04X\nPWM_POL: 0x%04X\nOUT_MODE: 0x%04X\n"
+        "A_STOP_READ: 0x%04X\nA_START_READ: 0x%04X",
         mt6701_uvw_mux_read(dev_handle),
         mt6701_abz_mux_read(dev_handle),
         mt6701_dir_read(dev_handle),
@@ -709,7 +734,7 @@ double mt6701_log_eeprom(i2c_master_dev_handle_t dev_handle) {
         mt6701_a_stop_read(dev_handle),
         mt6701_a_start_read(dev_handle)
     );
-    return 0;
+    return 0.0;
 }
 
 void i2c_master_init(i2c_master_bus_handle_t *bus_handle, i2c_master_dev_handle_t *dev_handle) {

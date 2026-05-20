@@ -8,12 +8,9 @@
 #include <errno.h>
 #include <limits.h>
 #include "driver/i2c_types.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_vfs_dev.h"
-#include "driver/uart.h"
 #include <stdbool.h>
 #include "fcntl.h"
+#include "freertos/idf_additions.h"
 #include "i2c_mt6701.h"
 
 #include "cli.h"
@@ -105,6 +102,8 @@ bool sv_tod(StringView *sv, double *out) {
     return true;
 }
 
+// for some reason if you print using printf (e.g. printf("%-10s ...", "string")), stack overflows while printing big strings
+// that's the reason for this solution
 void printpad(const char *str, size_t col) {
     size_t len = strlen(str);
     printf ("   %s", str);
@@ -328,14 +327,13 @@ bool parse_value(StringView *val, bool raw, double *out) {
     *out = 0.0;
     if (raw) {
         if (!sv_starts_with(val, "0x") && !sv_starts_with(val, "0X")) return false;
-        StringView slice = {.data = val->data + 2, .count = val->count - 2};
+        StringView slice = { .data = val->data + 2, .count = val->count - 2 };
         long hexv = 0;
         if (!sv_tolh(&slice, &hexv)) return false;
         *out = (double)hexv;
+        return true;
     }
-
-    if (!sv_tod(val, out)) return false;
-    return true;
+    return sv_tod(val, out);
 }
 
 void exec_help(struct CliContext *ctx, StringView *argv, size_t argc, uint8_t flags) {
@@ -520,6 +518,9 @@ ParsedCommand parse(CliContext *ctx, StringView *argv, size_t argc) {
 }
 
 void init_cli(CliContext *ctx) {
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     ctx->cmdv[CMD_HELP] = (Command){
         .name = sv("help"), .id = CMD_HELP, .exec_fn = exec_help, .help_fn = print_generic_help,
     };
@@ -584,7 +585,7 @@ void init_cli(CliContext *ctx) {
     ctx->table[OPT_SENSOR] = (MTEntry){
         .name = sv("SENSOR"), .read_raw = &mt6701_sensor_read_raw, .read = &mt6701_sensor_read, .write_raw = NULL, .write = NULL, .readable = true, .writable = false,
     };
-    ctx->table[OPT_EEPROM] = (MTEntry){
+    ctx->table[OPT_EEPROM] = (MTEntry){ // #TODO: change eeprom read bicycle
         .name = sv("EEPROM"), .read_raw = NULL, .read = &mt6701_log_eeprom, .write_raw = NULL, .write = NULL, .readable = true, .writable = false,
     };
 }
