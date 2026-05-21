@@ -13,69 +13,15 @@
 typedef struct {
     uint16_t hdr;
     uint8_t cmd;
-    uint8_t seq;
-    uint8_t rsp;
-    uint8_t len;
-    uint8_t *pld;
     uint16_t crc;
 } Packet;
 
-typedef struct {
-    Packet *txq[16]; // send queue
-    Packet *rsq[16]; // response queue
-    Packet *rxq[16]; // response queue
-    uint8_t txqs; // send queue size
-    uint8_t rsqs; // response queue size
-    uint8_t rxqs; // response queue size
-    uint8_t sqc; // sequence counter;
-} ProtocolCtx;
-
 typedef enum {
-    PING,
-    SREAD,
-    MSTART,
-    MSTOP = 0x04,
-    CREAD,
-    CWRITE,
-    REBOOT,
-    RSP_MASK = 0x80,
-    PING_ = 0x80,
-    SREAD_,
-    MSTART_,
-    MDATA_,
-    MSTOP_,
-    CREAD_,
-    CWRITE_,
-    REBOOT_,
+    SREAD = 0X01,
+    SREAD_ = 0X81,
 } CMDs;
 
-typedef enum {
-    OK,
-    ERR,
-    BAD_CMD,
-    BAD_REG,
-    BAD_VAL,
-} RSPs;
-
-typedef enum {
-    UVW_MUX,
-    ABZ_MUX,
-    DIR,
-    UVW_RES,
-    ABZ_RES,
-    HYST,
-    Z_PULSE_WIDTH,
-    ZERO,
-    PWM_FREQ,
-    PWM_POL,
-    OUT_MODE,
-    A_START,
-    A_STOP,
-} CREGs;
-
 const char *TAG = "uart_test";
-
-ProtocolCtx ctx;
 
 static const uint16_t crc16_tab[] = {
 	0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
@@ -134,20 +80,13 @@ bool packet_check_crc(uint8_t *buff, size_t len) {
 
 size_t encode_packet(Packet p, uint8_t *out, size_t buff_len) {
     if (!out) return 0;
-    if (buff_len < 8) return 0;
+    if (buff_len < 5) return 0;
 
     out[0] = (uint8_t)(p.hdr >> 8);
     out[1] = (uint8_t)(p.hdr & 0xFF);
     out[2] = p.cmd;
-    out[3] = p.seq;
-    out[4] = p.rsp;
-    out[5] = p.len;
 
-    if (p.len > 0 && p.pld) {
-        memcpy(out + 6, p.pld, p.len);
-    }
-    
-    size_t out_len = 6 + p.len + 2;
+    size_t out_len = 5;
 
     out[out_len - 2] = (uint8_t)(p.crc >> 8);
     out[out_len - 1] = (uint8_t)(p.crc & 0xFF);
@@ -157,28 +96,19 @@ size_t encode_packet(Packet p, uint8_t *out, size_t buff_len) {
 
 bool decode_packet(uint8_t *buff, size_t buff_len, Packet *out) {
     if (!buff || !out) return false;
-    if (buff_len < 8) return false;
+    if (buff_len < 5) return false;
 
     *out = (Packet){0};
 
     out->hdr = ((uint16_t)buff[0] << 8) | buff[1];
     out->cmd = buff[2];
-    out->seq = buff[3];
-    out->rsp = buff[4];
-    out->len = buff[5];
-
-    if (out->len > 0) {
-        if (buff_len - out->len < 8) return false;
-        out->pld = buff + 6;
-    }
-    else out->pld = NULL;
 
     out->crc = ((uint16_t)buff[buff_len - 2] << 8) | buff[buff_len - 1];
 
     return true;
 }
 
-void packet_frame(ProtocolCtx *ctx, uint8_t *buff, size_t len) {
+void packet_frame(uint8_t *buff, size_t len) {
     if (len < 4) return;
 
     buff[0] = (uint8_t)(PACKET_HEADER >> 8);
@@ -201,60 +131,31 @@ void struct_packet_frame(Packet *p) {
 
 void rx_task(void *arg) {
     uint8_t buff[UART_RX_BUFF_SIZE];
+    Packet p;
     while (1) {
         int buff_len = uart_read_bytes(UART_PORT_NUM, buff, UART_RX_BUFF_SIZE, pdMS_TO_TICKS(1000));
-        while (buff_len >= 8) {
-            if (ctx.rxqs >= 16) {
-                ESP_LOGE(TAG, "RX queue is full, can't add new");
-                continue;
-            }
-
-            ctx.rxq[ctx.rxqs] = &(Packet){0};
-            if (!decode_packet(buff, buff_len, ctx.rxq[ctx.rxqs])) {
-                ESP_LOGE(TAG, "Failed to decode received packet");
-                continue;
-            }
-
-            ESP_LOGI(TAG, "RX task received packet", ctx.rxq[ctx.rxqs]->seq);
-            buff_len -= 8 + ctx.rxq[ctx.rxqs]->len;
-            ctx.rxqs++;
+        if (!decode_packet(buff, buff_len, &p)) {
+            ESP_LOGE(TAG, "Failed to decode received packet");
+            continue;
+        }
+        if (p.cmd == SREAD) {
+            
         }
     }
 }
 
 void tx_task(void *arg) {
     uint8_t buff[11];
+    Packet p = {
+        .cmd = SREAD,
+    };
     while (1) {
-        if (ctx.txqs > 0) {
-            size_t buff_len = encode_packet(*ctx.txq[ctx.txqs - 1], buff, 11);
-            if (buff_len < 1) {
-                ESP_LOGE(TAG, "Invalid packet in queue, skipping");
-                ctx.txqs--;
-                continue;
-            }
-            packet_frame(&ctx, buff, buff_len);
+        size_t buff_len = encode_packet(p, buff, 11);
+        packet_frame(buff, buff_len);
 
-            if (ctx.rsqs >= 16) {
-                ESP_LOGE(TAG, "Response queue is full, can't add new");
-            }
-            else {
-                ctx.rsq[ctx.rsqs] = ctx.txq[ctx.txqs - 1];
-                ctx.rsqs++;
-            }
-
-            uart_write_bytes(UART_PORT_NUM, buff, buff_len);
-            ESP_LOGI(TAG, "TX task sent packet", ctx.txq[ctx.txqs - 1]->seq);
-
-            ctx.txqs--;
-        }
+        uart_write_bytes(UART_PORT_NUM, buff, buff_len);
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
-}
-
-
-void print_packet(Packet p) {
-    ESP_LOGI(TAG, "\nPacket:\nHDR: 0x%04X\nCMD: 0x%02X\nSEQ: 0x%02x\nRSP: 0x%02X\nLEN: 0x%02X\nCRC: 0x%04x\n",
-        p.hdr, p.cmd, p.seq, p.rsp, p.len, p.crc);
 }
 
 void app_main(void) {
@@ -272,49 +173,6 @@ void app_main(void) {
 
     ESP_ERROR_CHECK(uart_set_pin(UART_PORT_NUM, 4, 5, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
-    ctx = (ProtocolCtx){0};
-
     xTaskCreate(rx_task, "uart_rx_task", 3072, NULL, configMAX_PRIORITIES - 1, NULL);
     xTaskCreate(tx_task, "uart_tx_task", 3072, NULL, configMAX_PRIORITIES - 2, NULL);
-
-    Packet p0 = {0};
-    Packet p1 = {0};
-    Packet p2 = {0};
-    
-    p0.seq = ctx.sqc++;
-    p1.seq = ctx.sqc++;
-    p2.seq = ctx.sqc++;
-
-    ctx.txq[ctx.txqs++] = &p0;
-    ctx.txq[ctx.txqs++] = &p1;
-    ctx.txq[ctx.txqs++] = &p2;
-
-
-    while (1) {
-        if (ctx.rxqs > 0) {
-            Packet *p = ctx.rxq[ctx.rxqs - 1];
-            if (p->cmd & RSP_MASK) {
-                for (int i = 0; i < ctx.rsqs; i++) {
-                    if (ctx.rsq[i]->seq != p->seq) continue;
-                    ESP_LOGI(TAG, "Received response for packet %d:", p->seq);
-                    print_packet(*p);
-                    ctx.rsqs--;
-                    ctx.rxqs--;
-                }
-            }
-            else {
-                if (p->cmd == PING) {
-                    ESP_LOGI(TAG, "Received ping packet, sending response");
-                    print_packet(*p);
-
-                    ctx.txq[ctx.txqs] = &(*p);
-                    ctx.txq[ctx.txqs]->cmd = PING_;
-                    ctx.txqs++;
-                    ctx.rxqs--;
-                }
-            }
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
 }
