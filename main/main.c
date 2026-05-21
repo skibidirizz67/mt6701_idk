@@ -8,6 +8,60 @@
 #define UART_PORT_NUM UART_NUM_2
 #define UART_RX_BUFF_SIZE 1024
 
+#define PACKET_HEADER 0xAA55
+
+typedef struct {
+    uint16_t hdr;
+    uint8_t cmd;
+    uint8_t seq;
+    uint8_t rsp;
+    uint8_t len;
+    uint8_t *pld;
+    uint16_t crc;
+} Packet;
+
+typedef enum {
+    PING,
+    SREAD,
+    MSTART,
+    MSTOP = 0x04,
+    CREAD,
+    CWRITE,
+    REBOOT,
+    PING_ = 0x80,
+    SREAD_,
+    MSTART_,
+    MDATA_,
+    MSTOP_,
+    CREAD_,
+    CWRITE_,
+    REBOOT_,
+} CMDs;
+
+typedef enum {
+    OK,
+    ERR,
+    BAD_CMD,
+    BAD_REG,
+    BAD_VAL,
+} RSPs;
+
+typedef enum {
+    UVW_MUX,
+    ABZ_MUX,
+    DIR,
+    UVW_RES,
+    ABZ_RES,
+    HYST,
+    Z_PULSE_WIDTH,
+    ZERO,
+    PWM_FREQ,
+    PWM_POL,
+    OUT_MODE,
+    A_START,
+    A_STOP,
+} CREGs;
+
 const char *TAG = "uart_test";
 
 static const uint16_t crc16_tab[] = {
@@ -51,7 +105,7 @@ uint16_t crc16_ccitt(uint16_t init, const uint8_t *buff, size_t len) {
 	return cksum;
 }
 
-bool append_crc(uint8_t *buff, size_t len) {
+bool packet_append_crc(uint8_t *buff, size_t len) {
     if (len < 3) return false;
     uint16_t cksum = crc16_ccitt(0xFFFF, buff, len - 2);
     buff[len - 2] = (uint8_t)(cksum >> 8);
@@ -59,17 +113,77 @@ bool append_crc(uint8_t *buff, size_t len) {
     return true;
 }
 
-typedef struct {
-    uint8_t hdr;
-    uint8_t cmd;
-    uint8_t rsp;
-    uint8_t len;
-    uint8_t *pld;
-    uint16_t crc;
-} Packet;
+bool packet_check_crc(uint8_t *buff, size_t len) {
+    uint16_t cksum_a = crc16_ccitt(0xFFFF, buff, len - 2);
+    uint16_t cksum_b = ((uint16_t)buff[len - 2] << 8) | buff[len - 1];
+    return cksum_a == cksum_b;
+}
 
-bool parse_packet(uint8_t buff, size_t buff_len, Packet *packet) {
-    return false;
+size_t encode_packet(Packet p, uint8_t *out, size_t buff_len) {
+    if (!out) return 0;
+    if (buff_len < 8) return 0;
+
+    out[0] = (uint8_t)(p.hdr >> 8);
+    out[1] = (uint8_t)(p.hdr & 0xFF);
+    out[2] = p.cmd;
+    out[3] = p.seq;
+    out[4] = p.rsp;
+    out[5] = p.len;
+
+    if (p.len > 0 && p.pld) {
+        memcpy(out + 6, p.pld, p.len);
+    }
+    
+    size_t out_len = 6 + p.len + 2;
+
+    out[out_len - 2] = (uint8_t)(p.crc >> 8);
+    out[out_len - 1] = (uint8_t)(p.crc & 0xFF);
+
+    return true;
+}
+
+bool decode_packet(uint8_t *buff, size_t buff_len, Packet *out) {
+    if (!buff || !out) return false;
+    if (buff_len < 8) return false;
+
+    *out = (Packet){0};
+
+    out->hdr = ((uint16_t)buff[0] << 8) | buff[1];
+    out->cmd = buff[2];
+    out->seq = buff[3];
+    out->rsp = buff[4];
+    out->len = buff[5];
+
+    if (out->len > 0) {
+        if (buff_len - out->len != 8) return false;
+        out->pld = buff + 6;
+    }
+    else out->pld = NULL;
+
+    out->crc = ((uint16_t)buff[buff_len - 2] << 8) | buff[buff_len - 1];
+
+    return true;
+}
+
+void packet_frame(uint8_t *buff, size_t len) {
+    if (len < 4) return;
+
+    buff[0] = (uint8_t)(PACKET_HEADER >> 8);
+    buff[1] = (uint8_t)(PACKET_HEADER & 0xFF);
+
+    packet_append_crc(buff, len);
+}
+
+void struct_packet_frame(Packet *p) {
+    p->hdr = 0xAA55;
+    
+    uint8_t tmp[11];
+    size_t tmp_len = 11;
+
+    tmp_len = encode_packet(*p, tmp, tmp_len);
+    if (tmp_len == 0) return;
+
+    p->crc = crc16_ccitt(0xFFFF, tmp, tmp_len - 2);
 }
 
 void rx_task(void *arg) {
@@ -77,21 +191,19 @@ void rx_task(void *arg) {
     while (1) {
         const int buff_len = uart_read_bytes(UART_PORT_NUM, buff, UART_RX_BUFF_SIZE, pdMS_TO_TICKS(1000));
         if (buff_len > 0) {
-            ESP_LOGI(TAG, "RX task received %d bytes:", buff_len);
+            ESP_LOGI(TAG, "\nRX task received %d bytes:", buff_len);
             ESP_LOG_BUFFER_HEXDUMP(TAG, buff, buff_len, ESP_LOG_INFO);
-
-            uint16_t rxcksum = 0;
         }
     }
 }
 
 void tx_task(void *arg) {
-    uint8_t buff[] = {0x69, 0x01, 0x00, 0x00, 0x00};
-    size_t buff_len = sizeof(buff) / sizeof(buff[0]);
-    append_crc(buff, buff_len);
+    uint8_t buff[] = {0, 0, 0x00, 0x00, 0x00, 0x00, 0, 0};
+    size_t buff_len = 8;
+    packet_frame(buff, buff_len);
     while (1) {
         uart_write_bytes(UART_PORT_NUM, buff, buff_len);
-        ESP_LOGI(TAG, "\nTX sent %d bytes...\n", buff_len);
+        ESP_LOGI(TAG, "\nTX task sent %d bytes...\n", buff_len);
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
