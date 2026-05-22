@@ -215,6 +215,28 @@ int main(void) {
 
             client_send_packet(fd, &p);
         }
+        else if (c == 'h') {
+            printf ("Trying to send HYST read request..\n");
+            pld[0] = HYST;
+
+	        p.cmd = READ_CONFIG;
+            p.len = 1;
+	        p.pld = &pld[0];
+
+            client_send_packet(fd, &p);;
+        }
+        else if (c == 'H') {
+            printf ("Trying to send HYST write request..\n");
+            pld[0] = HYST;
+            pld[1] = 0;
+            pld[2] = 0x05;
+
+	        p.cmd = WRITE_CONFIG;
+            p.len = 3;
+	        p.pld = &pld[0];
+
+            client_send_packet(fd, &p);
+        }
     }
     close(fd);
     return 0;

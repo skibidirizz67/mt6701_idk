@@ -59,6 +59,50 @@ uint16_t server_get_reg_value(uint8_t reg) {
     return 0;
 }
 
+void server_set_reg_value(uint8_t reg, uint16_t val) {
+    switch (reg) {
+        case UVW_MUX:
+            mt6701_uvw_mux_write_raw(dev_handle, val);
+            break;
+        case ABZ_MUX:
+            mt6701_abz_mux_write_raw(dev_handle, val);
+            break;
+        case DIR:
+            mt6701_dir_write_raw(dev_handle, val);
+            break;
+        case UVW_RES:
+            mt6701_uvw_res_write_raw(dev_handle, val);
+            break;
+        case ABZ_RES:
+            mt6701_abz_res_write_raw(dev_handle, val);
+            break;
+        case HYST:
+            mt6701_hyst_write_raw(dev_handle, val);
+            break;
+        case Z_PULSE_WIDTH:
+            mt6701_z_pulse_width_write_raw(dev_handle, val);
+            break;
+        case ZERO:
+            mt6701_zero_write_raw(dev_handle, val);
+            break;
+        case PWM_FREQ:
+            mt6701_pwm_freq_write_raw(dev_handle, val);
+            break;
+        case PWM_POL:
+            mt6701_pwm_pol_write_raw(dev_handle, val);
+            break;
+        case OUT_MODE:
+            mt6701_out_mode_write_raw(dev_handle, val);
+            break;
+        case A_START:
+            mt6701_a_start_write_raw(dev_handle, val);
+            break;
+        case A_STOP:
+            mt6701_a_stop_write_raw(dev_handle, val);
+            break;
+    }
+}
+
 void server_handle_packet(const Packet *p) {
 	if (!p || p->hdr != PKT_HDR || !check_packet_crc(p) || (p->len > 0 && !p->pld)) return;
 	
@@ -92,6 +136,11 @@ void server_handle_packet(const Packet *p) {
 
             server_send_packet(&r);
             break;
+        case WRITE_CONFIG:
+            reg = p->pld[0];
+            val = ((uint16_t)(p->pld[1]) << 8) | p->pld[2];
+
+            server_set_reg_value(reg, val);
 	}
 }
 
