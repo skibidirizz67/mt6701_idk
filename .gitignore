@@ -1,4 +1,5 @@
 build
+bin
 sshkey
 sshkey.pub
 .clangd
