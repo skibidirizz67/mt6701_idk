@@ -10,13 +10,9 @@
 
 static const uart_port_t UART_PORT = UART_NUM_0;
 
-QueueHandle_t uart_queue;
-i2c_master_bus_handle_t bus_handle;
-i2c_master_dev_handle_t dev_handle;
-
-uint16_t read_sensor_stub() {
-	return 0x03FF;
-}
+static QueueHandle_t uart_queue;
+static i2c_master_bus_handle_t bus_handle;
+static i2c_master_dev_handle_t dev_handle;
 
 bool server_send_packet(const Packet *p) {
 	uint8_t buf[MAX_PKT_LEN];
@@ -27,39 +23,81 @@ bool server_send_packet(const Packet *p) {
 	buf[buf_len - 2] = (uint8_t)(cksum >> 8);
 	buf[buf_len - 1] = (uint8_t)(cksum & 0xFF);
 
-	int sizeb = uart_write_bytes(UART_PORT, buf, buf_len);
-	ESP_LOGI("sizeb", "%d", sizeb);
-
+	uart_write_bytes(UART_PORT, buf, buf_len);
 	return true;
+}
+
+uint16_t server_get_reg_value(uint8_t reg) {
+    switch (reg) {
+        case UVW_MUX:
+            return mt6701_uvw_mux_read_raw(dev_handle);
+        case ABZ_MUX:
+            return mt6701_abz_mux_read_raw(dev_handle);
+        case DIR:
+            return mt6701_dir_read_raw(dev_handle);
+        case UVW_RES:
+            return mt6701_uvw_res_read_raw(dev_handle);
+        case ABZ_RES:
+            return mt6701_abz_res_read_raw(dev_handle);
+        case HYST:
+            return mt6701_hyst_read_raw(dev_handle);
+        case Z_PULSE_WIDTH:
+            return mt6701_z_pulse_width_read_raw(dev_handle);
+        case ZERO:
+            return mt6701_zero_read_raw(dev_handle);
+        case PWM_FREQ:
+            return mt6701_pwm_freq_read_raw(dev_handle);
+        case PWM_POL:
+            return mt6701_pwm_pol_read_raw(dev_handle);
+        case OUT_MODE:
+            return mt6701_out_mode_read_raw(dev_handle);
+        case A_START:
+            return mt6701_a_start_read_raw(dev_handle);
+        case A_STOP:
+            return mt6701_a_stop_read_raw(dev_handle);
+    }
+    return 0;
 }
 
 void server_handle_packet(const Packet *p) {
 	if (!p || p->hdr != PKT_HDR || !check_packet_crc(p) || (p->len > 0 && !p->pld)) return;
 	
-	Packet r = {
-		.hdr = PKT_HDR,
-	};
+    uint8_t reg;
+    uint16_t val;
+    uint8_t pld[3];
+	Packet r = { .hdr = PKT_HDR };
 
 	switch (p->cmd) {
 		case READ_SENSOR:
+            val = mt6701_sensor_read_raw(dev_handle);
+			pld[0] = (uint8_t)(val >> 8);
+			pld[1] = (uint8_t)(val & 0xFF);
+
 			r.cmd = READ_SENSOR;
 			r.len = 2;
-
-			uint16_t angle = mt6701_sensor_read_raw(dev_handle);
-			uint8_t buf[2] = {
-				(uint8_t)(angle >> 8),
-				(uint8_t)(angle & 0xFF),
-			};
-			r.pld = &buf[0];
+			r.pld = &pld[0];
 
 			server_send_packet(&r);
 			break;
+        case READ_CONFIG:
+            reg = p->pld[0];
+            val = server_get_reg_value(reg);
+            pld[0] = reg;
+            pld[1] = (uint8_t)(val >> 8);
+			pld[2] = (uint8_t)(val & 0xFF);
+
+            r.cmd = READ_CONFIG;
+            r.len = 3;
+            r.pld = &pld[0];
+
+            server_send_packet(&r);
+            break;
 	}
 }
 
 static void uart_event_task(void *pvParameters) {
     uart_event_t e;
-    uint8_t buf_arr[128];
+    uint8_t buf_arr[tx_rx_buf_len];
     uint8_t *buf = &buf_arr[0];
     size_t buf_len = 0;
     while (1) {
@@ -69,7 +107,7 @@ static void uart_event_task(void *pvParameters) {
             ESP_ERROR_CHECK_WITHOUT_ABORT(uart_get_buffered_data_len(UART_PORT, &buf_len));
             if (buf_len < 5) continue;
 			buf = &buf_arr[0];
-            buf_len = uart_read_bytes(UART_PORT, buf, buf_len, pdMS_TO_TICKS(100));
+            buf_len = uart_read_bytes(UART_PORT, buf, tx_rx_buf_len, pdMS_TO_TICKS(100));
             while (buf_len >= 5) {
                 Packet p;
                 size_t decoded_len;
@@ -81,7 +119,6 @@ static void uart_event_task(void *pvParameters) {
 
                 server_handle_packet(&p);
 
-                // check header, if wrong decr and continue, parse packet, cmd, pldlen, pld, crc, copy from cli command handler also enum
                 buf += decoded_len;
                 buf_len -= decoded_len;
             }
@@ -90,7 +127,7 @@ static void uart_event_task(void *pvParameters) {
 }
 
 void app_main(void) {
-    ESP_ERROR_CHECK(uart_driver_install(UART_PORT, 2048, 2048, 20, &uart_queue, 0));
+    ESP_ERROR_CHECK(uart_driver_install(UART_PORT, tx_rx_buf_len, tx_rx_buf_len, 16, &uart_queue, 0));
 
     uart_config_t uart_config = {
         .baud_rate = 115200,

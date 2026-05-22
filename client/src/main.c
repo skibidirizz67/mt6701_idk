@@ -57,17 +57,100 @@ int open_serial(const char *path, speed_t baud_rate) {
     return fd;
 }
 
+double conver_hyst(uint16_t val) {
+    switch (val) {
+        case 0:
+            return 1.0;
+        case 1:
+            return 2.0;
+        case 2:
+            return 4.0;
+        case 3:
+            return 8.0;
+        case 4:
+            return 0.0;
+        case 5:
+            return 0.25;
+        case 6:
+            return 0.5;
+        case 7:
+            return 1.0;
+    }
+    return 0;
+}
+
+double convert_z_pulse_width(uint16_t val) {
+    switch (val) {
+        case 0:
+            return 1;
+        case 1:
+            return 2;
+        case 2:
+            return 4;
+        case 3:
+            return 8;
+        case 4:
+            return 12;
+        case 5:
+            return 16;
+        case 6:
+            return 180;
+        case 7:
+            return 1;
+    }
+    return 0;
+}
+
+double client_convert_reg_value(uint8_t reg, uint16_t val) {
+    switch (reg) {
+        case UVW_MUX:
+            return (double)val;
+        case ABZ_MUX:
+            return (double)val;
+        case DIR:
+            return (double)val;
+        case UVW_RES:
+            return (double)(val + 1);
+        case ABZ_RES:
+            return (double)(val + 1);
+        case HYST:
+            return conver_hyst(val);
+        case Z_PULSE_WIDTH:
+            return convert_z_pulse_width(val);
+        case ZERO:
+            return val * 0.078;
+        case PWM_FREQ:
+            return val? 994.4 : 497.2;;
+        case PWM_POL:
+            return (double)val;
+        case OUT_MODE:
+            return (double)val;
+        case A_START:
+            return val * 0.078;
+        case A_STOP:
+            return val * 0.078;
+    }
+    return 0;
+}
+
 void client_handle_packet(const Packet *p) {
 	if (!p || p->hdr != PKT_HDR || !check_packet_crc(p) || (p->len > 0 && !p->pld)) return;
 	
+    uint8_t reg;
     uint16_t code;
-    double angle;
+    double val;
 
 	switch (p->cmd) {
 		case READ_SENSOR:
-		    code = ((uint16_t)p->pld[0] << 6) | (p->pld[1] & 0x3F);
-            angle = code / 16384.0 * 360.0;
-            printf("CLIENT RECEIVED ANGLE: %.3f (0x%04X)\n", angle, code);
+		    code = ((uint16_t)(p->pld[0]) << 8) | p->pld[1];
+            val = code / 16384.0 * 360.0;
+            printf("CLIENT RECEIVED ANGLE: %.3f (0x%04X)\n", val, code);
+		    break;
+        case READ_CONFIG:
+            reg = p->pld[0];
+		    code = ((uint16_t)(p->pld[1]) << 8) | p->pld[2];
+            val = client_convert_reg_value(reg, code);
+            printf("CLIENT RECEIVED REG_VALUE of 0x%02X: %.3f (0x%04X)\n", reg, val, code);
 		    break;
 	}
 }
@@ -78,7 +161,10 @@ int main(void) {
 
     uint8_t buf_arr[4096];
     uint8_t *buf = NULL;
+    uint8_t pld[3];
     ssize_t buf_len = 0;
+    Packet p = { .hdr = PKT_HDR };
+
     while (1) {
         int c = getchar();
         if (c == '\n') {
@@ -102,13 +188,30 @@ int main(void) {
             }
         }
         else if (c == 'a') {
-            printf ("Trying to send angle read packet..\n");
+            printf ("Trying to send angle read request..\n");
 
-	        Packet p = {
-	        	.hdr = PKT_HDR,
-                .cmd = READ_SENSOR,
-                .len = 0,
-	        };
+	        p.cmd = READ_SENSOR,
+            p.len = 0;
+
+            client_send_packet(fd, &p);
+        }
+        else if (c == 'r') {
+            printf ("Trying to send ABZ_RES read request..\n");
+            pld[0] = ABZ_RES;
+
+	        p.cmd = READ_CONFIG;
+            p.len = 1;
+	        p.pld = &pld[0];
+
+            client_send_packet(fd, &p);
+        }
+        else if (c == 'u') {
+            printf ("Trying to send UVW_MUX read request..\n");
+            pld[0] = UVW_MUX;
+
+	        p.cmd = READ_CONFIG;
+            p.len = 1;
+	        p.pld = &pld[0];
 
             client_send_packet(fd, &p);
         }

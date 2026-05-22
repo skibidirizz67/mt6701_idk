@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <string.h>
 
+static const size_t tx_rx_buf_len = 512;
 static const uint8_t PKT_HDR = 0xAA;
 static const uint8_t MIN_PKT_LEN = 5;
 static const uint8_t MAX_PKT_LEN = 8;
@@ -15,6 +16,22 @@ typedef enum {
 	READ_CONFIG,
 	WRITE_CONFIG,
 } Cmds;
+
+typedef enum {
+	UVW_MUX,
+	ABZ_MUX,
+	DIR,
+	UVW_RES,
+	ABZ_RES,
+	HYST,
+	Z_PULSE_WIDTH,
+	ZERO,
+	PWM_FREQ,
+	PWM_POL,
+	OUT_MODE,
+	A_START,
+	A_STOP
+} Regs;
 
 typedef struct Packet {
 	uint8_t hdr;
