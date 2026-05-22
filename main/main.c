@@ -5,23 +5,25 @@
 #include "hal/uart_types.h"
 #include "soc/clk_tree_defs.h"
 
-#define UART_PORT_NUM UART_NUM_2
-#define UART_RX_BUFF_SIZE 1024
-
-#define PACKET_HEADER 0xAA55
+static const uint8_t PKT_HDR = 0xAA;
+static const uint8_t MIN_PKT_LEN = 5;
+static const uint8_t MAX_PKT_LEN = 8;
 
 typedef struct {
-    uint16_t hdr;
-    uint8_t cmd;
-    uint16_t crc;
+	uint8_t hdr;
+	uint8_t cmd;
+	uint8_t len;
+	uint8_t *pld;
+	uint16_t crc;
 } Packet;
 
 typedef enum {
-    SREAD = 0X01,
-    SREAD_ = 0X81,
-} CMDs;
+	READ_SENSOR,
+	READ_CONFIG,
+	WRITE_CONFIG,
+} Cmds;
 
-const char *TAG = "uart_test";
+QueueHandle_t uart_queue;
 
 static const uint16_t crc16_tab[] = {
 	0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
@@ -57,122 +59,105 @@ static const uint16_t crc16_tab[] = {
 	0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
 	0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0,
 };
-uint16_t crc16_ccitt(uint16_t init, const uint8_t *buff, size_t len) {
-    uint16_t cksum = init;
-	for (int i = 0;  i < len;  i++)
-		cksum = crc16_tab[((cksum>>8) ^ *buff++) & 0xff] ^ (cksum << 8);
+uint16_t crc16_ccitt(const uint8_t *buf, size_t buf_len) {
+    uint16_t cksum = 0xFFFF;
+	for (size_t i = 0; i < buf_len; i++) {
+		cksum = crc16_tab[((cksum>>8) ^ *buf++) & 0xFF] ^ (cksum << 8);
+	}
 	return cksum;
 }
 
-bool packet_append_crc(uint8_t *buff, size_t len) {
-    if (len < 3) return false;
-    uint16_t cksum = crc16_ccitt(0xFFFF, buff, len - 2);
-    buff[len - 2] = (uint8_t)(cksum >> 8);
-    buff[len - 1] = (uint8_t)(cksum & 0XFF);
-    return true;
+bool check_crc(const uint8_t *buf, size_t buf_len) {
+	if (!buf || buf_len < 3) return false;
+	return (((uint16_t)buf[buf_len - 2] << 8) | buf[buf_len - 1]) ==
+		crc16_ccitt(buf, buf_len - 2);
 }
 
-bool packet_check_crc(uint8_t *buff, size_t len) {
-    uint16_t cksum_a = crc16_ccitt(0xFFFF, buff, len - 2);
-    uint16_t cksum_b = ((uint16_t)buff[len - 2] << 8) | buff[len - 1];
-    return cksum_a == cksum_b;
+size_t encode_packet(const Packet *p, uint8_t *buf, size_t buf_len) {
+	if (!p || !buf) return 0;
+	if (buf_len < (MIN_PKT_LEN + p->len)) return 0;
+
+	buf[0] = p->hdr;
+	buf[1] = p->cmd;
+	buf[2] = p->len;
+	if (p->len > 0) memcpy(buf + 3, p->pld, p->len);
+	buf += 3 + p->len;
+	buf[0] = (uint8_t)(p->crc >> 8);
+	buf[1] = (uint8_t)(p->crc & 0xFF);
+
+	return MIN_PKT_LEN + p->len;
 }
 
-size_t encode_packet(Packet p, uint8_t *out, size_t buff_len) {
-    if (!out) return 0;
-    if (buff_len < 5) return 0;
+bool decode_packet(uint8_t *buf, size_t buf_len, Packet *p) {
+	if (!buf || !p) return false;
+	if (buf_len < MIN_PKT_LEN || buf_len < (MIN_PKT_LEN + buf[2])) return false;
 
-    out[0] = (uint8_t)(p.hdr >> 8);
-    out[1] = (uint8_t)(p.hdr & 0xFF);
-    out[2] = p.cmd;
+	p->hdr = buf[0];
+	p->cmd = buf[1];
+	p->len = buf[2];
+	if (p->len > 0) p->pld = buf + 3;
+	buf += 3 + p->len;
+	p->crc = ((uint16_t)buf[0] << 8) | buf[1];
 
-    size_t out_len = 5;
-
-    out[out_len - 2] = (uint8_t)(p.crc >> 8);
-    out[out_len - 1] = (uint8_t)(p.crc & 0xFF);
-
-    return out_len;
+	return true;
 }
 
-bool decode_packet(uint8_t *buff, size_t buff_len, Packet *out) {
-    if (!buff || !out) return false;
-    if (buff_len < 5) return false;
-
-    *out = (Packet){0};
-
-    out->hdr = ((uint16_t)buff[0] << 8) | buff[1];
-    out->cmd = buff[2];
-
-    out->crc = ((uint16_t)buff[buff_len - 2] << 8) | buff[buff_len - 1];
-
-    return true;
+bool check_packet_crc(const Packet *p) {
+	if (!p) return false;
+	uint8_t buf[MAX_PKT_LEN];
+	uint8_t buf_len = encode_packet(p, buf, MAX_PKT_LEN);
+	if (buf_len == 0) return false;
+	return check_crc(buf, buf_len);
 }
 
-void packet_frame(uint8_t *buff, size_t len) {
-    if (len < 4) return;
-
-    buff[0] = (uint8_t)(PACKET_HEADER >> 8);
-    buff[1] = (uint8_t)(PACKET_HEADER & 0xFF);
-
-    packet_append_crc(buff, len);
+uint16_t read_sensor_stub() {
+	return 0x03FF;
 }
 
-void struct_packet_frame(Packet *p) {
-    p->hdr = 0xAA55;
-    
-    uint8_t tmp[11];
-    size_t tmp_len = 11;
-
-    tmp_len = encode_packet(*p, tmp, tmp_len);
-    if (tmp_len == 0) return;
-
-    p->crc = crc16_ccitt(0xFFFF, tmp, tmp_len - 2);
+void server_handle_packet(const Packet *p) {
+	if (!p || p->hdr != PKT_HDR || !check_packet_crc(p)) return;
+	
+	switch (p->cmd) {
+		case READ_SENSOR:
+			break;
+	}
 }
 
-void rx_task(void *arg) {
-    uint8_t buff[UART_RX_BUFF_SIZE];
-    Packet p;
+static void uart_event_task(void *pvParameters) {
+    uart_event_t e;
+    uint8_t buff[128];
+    size_t buff_len;
     while (1) {
-        int buff_len = uart_read_bytes(UART_PORT_NUM, buff, UART_RX_BUFF_SIZE, pdMS_TO_TICKS(1000));
-        if (!decode_packet(buff, buff_len, &p)) {
-            ESP_LOGE(TAG, "Failed to decode received packet");
-            continue;
-        }
-        if (p.cmd == SREAD) {
-            
-        }
-    }
-}
+        if (xQueueReceive(uart_queue, (void*)&e, (TickType_t)portMAX_DELAY)) {
+            if (event.type != UART_DATA) continue;
 
-void tx_task(void *arg) {
-    uint8_t buff[11];
-    Packet p = {
-        .cmd = SREAD,
-    };
-    while (1) {
-        size_t buff_len = encode_packet(p, buff, 11);
-        packet_frame(buff, buff_len);
-
-        uart_write_bytes(UART_PORT_NUM, buff, buff_len);
-        vTaskDelay(pdMS_TO_TICKS(2000));
+            ESP_ERROR_CHECK_WITHOUT_ABORT(uart_get_buffered_data_len(UART_NUM_2, &buff_len));
+            if (buff_len < 5) continue;
+            buff_len = uart_read_bytes(UART_NUM_2, buff, buff_len, pdMS_TO_TICKS(100));
+            while (buff_len >= 5) {
+                // check header, if wrong decr and continue, parse packet, cmd, pldlen, pld, crc, copy from cli command handler also enum
+                // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/uart.html
+                // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/uart.html#_CPPv415uart_read_bytes11uart_port_tPv8uint32_t8uint32_t
+                // https://github.com/espressif/esp-idf/blob/v6.0.1/examples/peripherals/uart/uart_events
+            }
+        }
     }
 }
 
 void app_main(void) {
-    ESP_ERROR_CHECK(uart_driver_install(UART_PORT_NUM, UART_RX_BUFF_SIZE * 2, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_2, 128, 128, 8, &uart_queue, 0));
 
     uart_config_t uart_config = {
-        .baud_rate = 115200, 
+        .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_DEFAULT,
     };
-    ESP_ERROR_CHECK(uart_param_config(UART_PORT_NUM, &uart_config));
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_2, &uart_config));
 
-    ESP_ERROR_CHECK(uart_set_pin(UART_PORT_NUM, 4, 5, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, 4, 5, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
-    xTaskCreate(rx_task, "uart_rx_task", 3072, NULL, configMAX_PRIORITIES - 1, NULL);
-    xTaskCreate(tx_task, "uart_tx_task", 3072, NULL, configMAX_PRIORITIES - 2, NULL);
+    xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, configMAX_PRIORITIES / 2, NULL);
 }
