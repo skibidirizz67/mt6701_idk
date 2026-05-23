@@ -1,8 +1,8 @@
 # Protocol 
 
-Baud rate: 115200
-Configuration: 8N1 (8 data bits, no parity, 1 stop bit)
-Flow control: none
+ * Baud rate: 115200
+ * Configuration: 8N1 (8 data bits, no parity, 1 stop bit)
+ * Flow control: none
 
 ## Packet layout
 
@@ -40,6 +40,7 @@ Should contain 1-byte payload in form of a configuration option.
 Server should respond with the same configuration option and it's value.
 Following options are available:
 
+```
  * UVW_MUX          (0x00)
  * ABZ_MUX          (0x01)
  * DIR              (0x02)
@@ -53,6 +54,7 @@ Following options are available:
  * OUT_MODE         (0x0A)
  * A_START          (0x0B)
  * A_STOP           (0x0C)
+```
 
 
 If received by client, treated like configuration option information.
