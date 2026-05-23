@@ -16,7 +16,7 @@ typedef struct Packet {
 } Packet;
 ```
 
-## Header: 0x55
+### Header: 0x55
 
 ## Commands
 
@@ -26,15 +26,18 @@ Available commands / packet types and their description
 
 If received by server, treated like request to get encoder angle position data.
 Should not contain any payload.
+Server should respond with angle data.
 
 
 If recived by client, treated like angle position data.
 Should contain 2-byte payload in form of unprocessed angle data.
+Client should not respond in any way (just print out the value).
 
 ### READ_CONFIG (0x01)
 
 If received by server, treated like request to get encoder configuration.
 Should contain 1-byte payload in form of a configuration option.
+Server should respond with the same configuration option and it's value.
 Following options are available:
 
  * UVW_MUX          (0x00)
@@ -54,12 +57,37 @@ Following options are available:
 
 If received by client, treated like configuration option information.
 Should contain 3-byte payload in form of a configuration option (1 byte) and a value (2 bytes).
+Client should not respond in any way (just print out the value).
 
 ### WRITE_CONFIG (0x02)
 
 If received by server, treated like command to modify encoder configuration.
 Should contain 3-byte payload in form of a configuration option (1 byte) and a value (2 bytes).
-Out-of-range values will be automatically truncated by i2c_mt6701 server component
+Out-of-range values will be automatically truncated by i2c_mt6701 server component.
+Server should not respond in any way (just update config).
 
 
 Ignored by client.
+
+# Other
+
+## Server
+
+Server is an ESP32 board connected to MT6701 magnet encoder (I2C).
+It constantly listents for incoming packets on UART port 0 (the USB one) and responds accordingly; Tx is GPIO 1 and Rx is GPIO 3 (default)
+
+## Client
+
+Client is any machine that can run the client code (probably only Linux distros) and is connected to a Server over UART.
+Connection is established using termios library, and communication is done using standard unistd.h functions.
+Client is controlled by user using terminal. On command, client reads the file descripitor and parses any packets available, or sends request packets.
+USB port is hard-coded to /dev/ttyUSB0
+
+### Client commands:
+
+ * \n (newline) -- read file descriptor and parse any available packets; prints out information like angle
+ * a -- send request to get angle sensor value (you should spam \n a few times to get the response)
+ * r -- send request to get ABZ_RES config value (you should spam \n a few times to get the response)
+ * u -- send request to get UVW_MUX config value (you should spam \n a few times to get the response)
+ * h -- send request to get HYST config value (you should spam \n a few times to get the response)
+ * H -- send request to modify HYST config value (the new value is hardcoded to be 0x05)
