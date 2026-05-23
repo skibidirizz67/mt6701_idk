@@ -8,12 +8,20 @@ uint16_t crc16_ccitt(const uint8_t *buf, size_t buf_len) {
 	return cksum;
 }
 
+// compare values in last 2 bytes of a buffer to a computed checksum
 bool check_crc(const uint8_t *buf, size_t buf_len) {
 	if (!buf || buf_len < 3) return false;
 	return (((uint16_t)buf[buf_len - 2] << 8) | buf[buf_len - 1]) ==
 		crc16_ccitt(buf, buf_len - 2);
 }
 
+/* turn Packet struct into stream of bytes
+ * Parameters:
+ *  const Packet *p -- pointer to packet to encode
+ *  uint8_t *buf    -- buffer to write bytes into
+ *  size_t buf_len  -- size of the buf
+ * Returns: on success - number of bytes, written into buffer; on failure - zero
+*/
 size_t encode_packet(const Packet *p, uint8_t *buf, size_t buf_len) {
 	if (!p || !buf) return 0;
 	if (buf_len < (size_t)(MIN_PKT_LEN + p->len)) return 0;
@@ -29,6 +37,13 @@ size_t encode_packet(const Packet *p, uint8_t *buf, size_t buf_len) {
 	return MIN_PKT_LEN + p->len;
 }
 
+/* turn stream of bytes into Packet struct
+ * Parameters:
+ *  uint8_t *buf   -- buffer with stream of bytes to decode
+ *  size_t buf_len -- size of the buf
+ *  Packet *p      -- packet to write data into
+ * Returns: on success - size of the Packet int bytes; on failure - zero
+*/
 size_t decode_packet(uint8_t *buf, size_t buf_len, Packet *p) {
 	if (!buf || !p) return 0;
 	if (buf_len < MIN_PKT_LEN || buf_len < (size_t)(MIN_PKT_LEN + buf[2])) return 0;

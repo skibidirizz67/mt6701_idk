@@ -11,12 +11,14 @@ static const uint8_t PKT_HDR = 0xAA;
 static const uint8_t MIN_PKT_LEN = 5;
 static const uint8_t MAX_PKT_LEN = 8;
 
+// packet types / commands
 typedef enum {
 	READ_SENSOR,
 	READ_CONFIG,
 	WRITE_CONFIG,
 } Cmds;
 
+// all possible registers for READ_CONFIG and WRITE_CONFIG
 typedef enum {
 	UVW_MUX,
 	ABZ_MUX,
@@ -34,11 +36,11 @@ typedef enum {
 } Regs;
 
 typedef struct Packet {
-	uint8_t hdr;
-	uint8_t cmd;
-	uint8_t len;
-	uint8_t *pld;
-	uint16_t crc;
+	uint8_t hdr;  // header / magic byte / SOF 
+	uint8_t cmd;  // packet type / command
+	uint8_t len;  // length of payload in bytes
+	uint8_t *pld; // payload (e.g. config register and data to write)
+	uint16_t crc; // CRC16-CCITT-FALSE checksum
 } Packet;
 
 static const uint16_t crc16_tab[] = {
@@ -81,4 +83,4 @@ size_t encode_packet(const Packet *p, uint8_t *buf, size_t buf_len);
 size_t decode_packet(uint8_t *buf, size_t buf_len, Packet *p);
 bool check_packet_crc(const Packet *p);
 
-#endif /* FOO_H */
+#endif /* SHARED_H */

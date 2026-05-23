@@ -10,6 +10,8 @@
 
 #include "shared.h"
 
+// encodes the packet, computes checksum and writes it into provided file descriptor (fd) using unistd.h write function
+// returns true if success, false if failed
 bool client_send_packet(int fd, const Packet *p) {
 	uint8_t buf[MAX_PKT_LEN];
 	size_t buf_len = encode_packet(p, buf, MAX_PKT_LEN);
@@ -20,41 +22,12 @@ bool client_send_packet(int fd, const Packet *p) {
 	buf[buf_len - 1] = (uint8_t)(cksum & 0xFF);
 
 	ssize_t n = write(fd, buf, buf_len);
-    if (n < 0) perror("write");
-
-	return true;
-}
-
-int open_serial(const char *path, speed_t baud_rate) {
-    int fd = open(path, O_RDWR | O_NOCTTY | O_NONBLOCK);
-    if (fd < 0) return -1;
-
-    struct termios tty;
-    if (tcgetattr(fd, &tty) != 0) {
-        close(fd);
-        return -1;
+    if (n < 0) {
+        perror("write");
+        return false;
     }
 
-    cfmakeraw(&tty);
-    cfsetispeed(&tty, baud_rate);
-    cfsetospeed(&tty, baud_rate);
-
-    tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
-    tty.c_cflag &= ~PARENB;
-    tty.c_cflag &= ~CSTOPB;
-    tty.c_cflag &= ~CRTSCTS;
-    tty.c_cflag |= CLOCAL | CREAD;
-
-    tty.c_iflag = 0;
-    tty.c_oflag = 0;
-    tty.c_lflag = 0;
-
-    tty.c_cc[VMIN]  = 1;
-    tty.c_cc[VTIME] = 1;
-
-    tcflush(fd, TCIOFLUSH);
-    if (tcsetattr(fd, TCSANOW, &tty) != 0) { close(fd); return -1; }
-    return fd;
+	return true;
 }
 
 double conver_hyst(uint16_t val) {
@@ -101,6 +74,7 @@ double convert_z_pulse_width(uint16_t val) {
     return 0;
 }
 
+// very ugly way of converting values, i know
 double client_convert_reg_value(uint8_t reg, uint16_t val) {
     switch (reg) {
         case UVW_MUX:
@@ -133,6 +107,7 @@ double client_convert_reg_value(uint8_t reg, uint16_t val) {
     return 0;
 }
 
+// handles received packets; invalid packets are ignored
 void client_handle_packet(const Packet *p) {
 	if (!p || p->hdr != PKT_HDR || !check_packet_crc(p) || (p->len > 0 && !p->pld)) return;
 	
@@ -155,6 +130,39 @@ void client_handle_packet(const Packet *p) {
 	}
 }
 
+// tries open serial communication with board using termios
+int open_serial(const char *path, speed_t baud_rate) {
+    int fd = open(path, O_RDWR | O_NOCTTY | O_NONBLOCK);
+    if (fd < 0) return -1;
+
+    struct termios tty;
+    if (tcgetattr(fd, &tty) != 0) {
+        close(fd);
+        return -1;
+    }
+
+    cfmakeraw(&tty);
+    cfsetispeed(&tty, baud_rate);
+    cfsetospeed(&tty, baud_rate);
+
+    tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
+    tty.c_cflag &= ~PARENB;
+    tty.c_cflag &= ~CSTOPB;
+    tty.c_cflag &= ~CRTSCTS;
+    tty.c_cflag |= CLOCAL | CREAD;
+
+    tty.c_iflag = 0;
+    tty.c_oflag = 0;
+    tty.c_lflag = 0;
+
+    tty.c_cc[VMIN]  = 1;
+    tty.c_cc[VTIME] = 1;
+
+    tcflush(fd, TCIOFLUSH);
+    if (tcsetattr(fd, TCSANOW, &tty) != 0) { close(fd); return -1; }
+    return fd;
+}
+
 int main(void) {
     int fd = open_serial("/dev/ttyUSB0", B115200);
     if (fd < 0) { perror("open_serial"); return 1; }
@@ -173,9 +181,11 @@ int main(void) {
             buf_len = read(fd, buf, 4069);
             if (buf_len < 5) continue;
 
+            // while buffer contains enough data for potential packet, try to parse it
             while (buf_len >= 5) {
                 Packet r;
                 size_t decoded_len;
+                // if not a valid packet, advance pointer by 1 byte and try again
                 if (buf[0] != PKT_HDR || !(decoded_len = decode_packet(buf, buf_len, &r))) {
                     buf++;
                     buf_len--;
@@ -187,6 +197,7 @@ int main(void) {
                 buf_len -= decoded_len;
             }
         }
+        // probably an easier and better way would be to just write the code of the command and a register into stdin
         else if (c == 'a') {
             printf ("Trying to send angle read request..\n");
 

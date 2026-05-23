@@ -14,6 +14,8 @@ static QueueHandle_t uart_queue;
 static i2c_master_bus_handle_t bus_handle;
 static i2c_master_dev_handle_t dev_handle;
 
+// encodes the packet, computes checksum and writes it to UART buffer
+// returns true if success, false if failed
 bool server_send_packet(const Packet *p) {
 	uint8_t buf[MAX_PKT_LEN];
 	size_t buf_len = encode_packet(p, buf, MAX_PKT_LEN);
@@ -103,6 +105,7 @@ void server_set_reg_value(uint8_t reg, uint16_t val) {
     }
 }
 
+// handles received packets; invalid packets are ignored
 void server_handle_packet(const Packet *p) {
 	if (!p || p->hdr != PKT_HDR || !check_packet_crc(p) || (p->len > 0 && !p->pld)) return;
 	
@@ -144,22 +147,26 @@ void server_handle_packet(const Packet *p) {
 	}
 }
 
+// FreeRTOS task to watch incoming data stream and parse it
 static void uart_event_task(void *pvParameters) {
     uart_event_t e;
     uint8_t buf_arr[tx_rx_buf_len];
     uint8_t *buf = &buf_arr[0];
     size_t buf_len = 0;
+    // busy looping is fine since xQueueReceive will block and wait for an item to receive (TickType_t)portMAX_DELAY)
     while (1) {
         if (xQueueReceive(uart_queue, (void*)&e, (TickType_t)portMAX_DELAY)) {
             if (e.type != UART_DATA) continue;
 
             ESP_ERROR_CHECK_WITHOUT_ABORT(uart_get_buffered_data_len(UART_PORT, &buf_len));
-            if (buf_len < 5) continue;
+            if (buf_len < MIN_PKT_LEN) continue;
 			buf = &buf_arr[0];
             buf_len = uart_read_bytes(UART_PORT, buf, tx_rx_buf_len, pdMS_TO_TICKS(100));
-            while (buf_len >= 5) {
+            // while buffer contains enough data for potential packet, try to parse it
+            while (buf_len >= MIN_PKT_LEN) {
                 Packet p;
                 size_t decoded_len;
+                // if not a valid packet, advance pointer by 1 byte and try again
                 if (buf[0] != PKT_HDR || !(decoded_len = decode_packet(buf, buf_len, &p))) {
                     buf++;
                     buf_len--;
