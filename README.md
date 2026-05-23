@@ -16,7 +16,7 @@ typedef struct Packet {
 } Packet;
 ```
 
-### Header: 0x55
+### Header: 0xAA
 
 ## Commands
 
