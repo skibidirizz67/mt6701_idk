@@ -163,7 +163,168 @@ int open_serial(const char *path, speed_t baud_rate) {
     return fd;
 }
 
+#define CLI_MAX_STR_LEN 256
+#define CLI_MAX_TOKENS 16
+#define CLI_RAW_FLAG (1u << 0)
+
+typedef struct {
+    const char *data;
+    size_t count;
+} StringView;
+
+StringView sv(const char *str) {
+    return (StringView) {
+        .data = str,
+        .count = strlen(str),
+    };
+}
+
+bool sv_cmp(StringView *a, StringView *b) {
+    return (a->count == b->count) && memcmp(a->data, b->data, a->count) == 0;
+}
+
+bool sv_scmp(StringView *a, const char *b) {
+    return (a->count == strlen(b)) && memcmp(a->data, b, a->count) == 0;
+}
+
+bool sv_starts_with(StringView *a, const char *prefix) {
+    size_t plen = strlen(prefix);
+    return a->count >= plen && memcmp(a->data, prefix, plen) == 0;
+}
+
+bool sv_tolh(StringView *sv, long *out) {
+    if (!out || sv->count == 0 || sv->count >= 64) return false;
+    char buff[64];
+    memcpy(buff, sv->data, sv->count);
+    buff[sv->count] = '\0';
+    errno = 0;
+    char *end = NULL;
+    unsigned long v = strtoul(buff, &end, 16);
+    if (errno != 0 || end == buff || *end != '\0') return false;
+    *out = v;
+    return true;
+}
+
+int tokenize(char *str, StringView *argv, size_t *argc) {
+    static const char *ws = " \t";
+    *argc = 0;
+
+    while (*str) {
+        str += strspn(str, ws);
+        if (!*str) break;
+        if (*argc >= CLI_MAX_TOKENS) {
+            printf("   Exceeded argument limit: %d\n", CLI_MAX_TOKENS);
+            return -1;
+        }
+
+        argv[*argc].data = str;
+        argv[*argc].count = strcspn(str, ws);
+        str += argv[*argc].count;
+        (*argc)++;
+    }
+
+    return 0;
+}
+
 int main(void) {
+    int fd = open_serial("/dev/ttyUSB0", B115200);
+    if (fd < 0) { perror("open_serial"); return 1; }
+
+    char *line = NULL;
+    size_t n = 0;
+
+    uint8_t buf_arr[4096];
+    uint8_t *buf = NULL;
+    uint8_t pld[3];
+    ssize_t buf_len = 0;
+    Packet p = { .hdr = PKT_HDR };
+
+    while (1) {
+        printf("[mt6701]> ");
+        fflush(stdout);
+
+        ssize_t r = getline(&line, &n, stdin);
+        if (r == -1) {
+            if (feof(stdin)) break;
+            clearerr(stdin);
+            continue;
+        }
+
+        while (r > 0 && (line[r-1] == '\n' || line[r-1] == '\r')) {
+            line[--r] = '\0';
+        }
+        if (r == 0) {
+            printf ("Trying to receive packets..\n");
+            buf = &buf_arr[0];
+            buf_len = read(fd, buf, 4069);
+            if (buf_len < 5) continue;
+
+            // while buffer contains enough data for potential packet, try to parse it
+            while (buf_len >= 5) {
+                Packet r;
+                size_t decoded_len;
+                // if not a valid packet, advance pointer by 1 byte and try again
+                if (buf[0] != PKT_HDR || !(decoded_len = decode_packet(buf, buf_len, &r))) {
+                    buf++;
+                    buf_len--;
+                    continue;
+                }
+                client_handle_packet(&r);
+
+                buf += decoded_len;
+                buf_len -= decoded_len;
+            }
+            continue;
+        }
+
+        StringView argv[CLI_MAX_TOKENS];
+        size_t argc = 0;
+        if (tokenize(line, argv, &argc) == 0 && argc > 0) {
+            StringView *cmd = &argv[0];
+            if (sv_scmp(cmd, "ang")) {
+	            p.cmd = READ_SENSOR,
+                p.len = 0;
+
+                printf("Sending packet...\n");
+                client_send_packet(fd, &p);
+            }
+            else if (sv_scmp(cmd, "reg")) {
+                if (argc < 2) continue;
+                long reg;
+                if (!sv_tolh(&argv[1], &reg)) continue;
+                pld[0] = (uint8_t)reg;
+                p.cmd = READ_CONFIG,
+                p.len = 1;
+	            p.pld = &pld[0];
+
+                printf("Sending packet...\n");
+                client_send_packet(fd, &p);
+            }
+            else if (sv_scmp(cmd, "wreg")) {
+                if (argc < 3) continue;
+                long reg, val;
+                if (!sv_tolh(&argv[1], &reg)) continue;
+                if (!sv_tolh(&argv[2], &val)) continue;
+                pld[0] = (uint8_t)reg;
+                pld[1] = (uint8_t)(val >> 8);
+                pld[2] = (uint8_t)(val & 0xFF);
+                p.cmd = WRITE_CONFIG,
+                p.len = 3;
+	            p.pld = &pld[0];
+
+                printf("Sending packet...\n");
+                client_send_packet(fd, &p);
+            }
+        }
+    }
+
+    free(line);
+    close(fd);
+    return 0;
+}
+
+
+int bonkers(void) {
     int fd = open_serial("/dev/ttyUSB0", B115200);
     if (fd < 0) { perror("open_serial"); return 1; }
 

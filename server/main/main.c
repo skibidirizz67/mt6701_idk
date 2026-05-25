@@ -8,7 +8,7 @@
 
 #include "shared.h"
 
-static const uart_port_t UART_PORT = UART_NUM_0;
+static const uart_port_t UART_PORT = UART_NUM_2;
 
 static QueueHandle_t uart_queue;
 static i2c_master_bus_handle_t bus_handle;
@@ -195,7 +195,7 @@ void app_main(void) {
     };
     ESP_ERROR_CHECK(uart_param_config(UART_PORT, &uart_config));
 
-    ESP_ERROR_CHECK(uart_set_pin(UART_PORT, 1, 3, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    ESP_ERROR_CHECK(uart_set_pin(UART_PORT, 22, 23, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
     i2c_mt6701_init(&bus_handle, &dev_handle);
 
