@@ -9,13 +9,19 @@
 static const size_t tx_rx_buf_len = 512;
 static const uint8_t PKT_HDR = 0xAA;
 static const uint8_t MIN_PKT_LEN = 5;
-static const uint8_t MAX_PKT_LEN = 8;
+static const uint8_t MAX_PKT_LEN = 9;
+static const uint8_t MAX_PLD_LEN = 8;
 
 // packet types / commands
 typedef enum {
 	READ_SENSOR,
 	READ_CONFIG,
 	WRITE_CONFIG,
+	READ_VBUS,
+	READ_DIETEMP,
+	READ_VSHUNT,
+	READ_CURRENT,
+	READ_POWER,
 } Cmds;
 
 // all possible registers for READ_CONFIG and WRITE_CONFIG

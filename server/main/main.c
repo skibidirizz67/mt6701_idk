@@ -4,15 +4,13 @@
 #include "freertos/projdefs.h"
 #include "hal/uart_types.h"
 #include "soc/clk_tree_defs.h"
-#include "i2c_mt6701.h"
+#include "i2c_control.h"
 
 #include "shared.h"
 
 static const uart_port_t UART_PORT = UART_NUM_0;
 
 static QueueHandle_t uart_queue;
-static i2c_master_bus_handle_t bus_handle;
-static i2c_master_dev_handle_t dev_handle;
 
 // encodes the packet, computes checksum and writes it to UART buffer
 // returns true if success, false if failed
@@ -32,31 +30,31 @@ bool server_send_packet(const Packet *p) {
 uint16_t server_get_reg_value(uint8_t reg) {
     switch (reg) {
         case UVW_MUX:
-            return mt6701_uvw_mux_read_raw(dev_handle);
+            return mt6701_uvw_mux_read_raw();
         case ABZ_MUX:
-            return mt6701_abz_mux_read_raw(dev_handle);
+            return mt6701_abz_mux_read_raw();
         case DIR:
-            return mt6701_dir_read_raw(dev_handle);
+            return mt6701_dir_read_raw();
         case UVW_RES:
-            return mt6701_uvw_res_read_raw(dev_handle);
+            return mt6701_uvw_res_read_raw();
         case ABZ_RES:
-            return mt6701_abz_res_read_raw(dev_handle);
+            return mt6701_abz_res_read_raw();
         case HYST:
-            return mt6701_hyst_read_raw(dev_handle);
+            return mt6701_hyst_read_raw();
         case Z_PULSE_WIDTH:
-            return mt6701_z_pulse_width_read_raw(dev_handle);
+            return mt6701_z_pulse_width_read_raw();
         case ZERO:
-            return mt6701_zero_read_raw(dev_handle);
+            return mt6701_zero_read_raw();
         case PWM_FREQ:
-            return mt6701_pwm_freq_read_raw(dev_handle);
+            return mt6701_pwm_freq_read_raw();
         case PWM_POL:
-            return mt6701_pwm_pol_read_raw(dev_handle);
+            return mt6701_pwm_pol_read_raw();
         case OUT_MODE:
-            return mt6701_out_mode_read_raw(dev_handle);
+            return mt6701_out_mode_read_raw();
         case A_START:
-            return mt6701_a_start_read_raw(dev_handle);
+            return mt6701_a_start_read_raw();
         case A_STOP:
-            return mt6701_a_stop_read_raw(dev_handle);
+            return mt6701_a_stop_read_raw();
     }
     return 0;
 }
@@ -64,43 +62,43 @@ uint16_t server_get_reg_value(uint8_t reg) {
 void server_set_reg_value(uint8_t reg, uint16_t val) {
     switch (reg) {
         case UVW_MUX:
-            mt6701_uvw_mux_write_raw(dev_handle, val);
+            mt6701_uvw_mux_write_raw(val);
             break;
         case ABZ_MUX:
-            mt6701_abz_mux_write_raw(dev_handle, val);
+            mt6701_abz_mux_write_raw(val);
             break;
         case DIR:
-            mt6701_dir_write_raw(dev_handle, val);
+            mt6701_dir_write_raw(val);
             break;
         case UVW_RES:
-            mt6701_uvw_res_write_raw(dev_handle, val);
+            mt6701_uvw_res_write_raw(val);
             break;
         case ABZ_RES:
-            mt6701_abz_res_write_raw(dev_handle, val);
+            mt6701_abz_res_write_raw(val);
             break;
         case HYST:
-            mt6701_hyst_write_raw(dev_handle, val);
+            mt6701_hyst_write_raw(val);
             break;
         case Z_PULSE_WIDTH:
-            mt6701_z_pulse_width_write_raw(dev_handle, val);
+            mt6701_z_pulse_width_write_raw(val);
             break;
         case ZERO:
-            mt6701_zero_write_raw(dev_handle, val);
+            mt6701_zero_write_raw(val);
             break;
         case PWM_FREQ:
-            mt6701_pwm_freq_write_raw(dev_handle, val);
+            mt6701_pwm_freq_write_raw(val);
             break;
         case PWM_POL:
-            mt6701_pwm_pol_write_raw(dev_handle, val);
+            mt6701_pwm_pol_write_raw(val);
             break;
         case OUT_MODE:
-            mt6701_out_mode_write_raw(dev_handle, val);
+            mt6701_out_mode_write_raw(val);
             break;
         case A_START:
-            mt6701_a_start_write_raw(dev_handle, val);
+            mt6701_a_start_write_raw(val);
             break;
         case A_STOP:
-            mt6701_a_stop_write_raw(dev_handle, val);
+            mt6701_a_stop_write_raw(val);
             break;
     }
 }
@@ -109,16 +107,17 @@ void server_set_reg_value(uint8_t reg, uint16_t val) {
 void server_handle_packet(const Packet *p) {
 	if (!p || p->hdr != PKT_HDR || !check_packet_crc(p) || (p->len > 0 && !p->pld)) return;
 	
-    uint8_t reg;
-    uint16_t val;
-    uint8_t pld[3];
 	Packet r = { .hdr = PKT_HDR };
+
+    uint8_t reg;
+    uint16_t mt6701_val;
+    uint8_t pld[MAX_PLD_LEN];
 
 	switch (p->cmd) {
 		case READ_SENSOR:
-            val = mt6701_sensor_read_raw(dev_handle);
-			pld[0] = (uint8_t)(val >> 8);
-			pld[1] = (uint8_t)(val & 0xFF);
+            mt6701_val = mt6701_sensor_read_raw();
+            pld[0] = (uint8_t)(mt6701_val >> 8);
+			pld[1] = (uint8_t)(mt6701_val & 0xFF);
 
 			r.cmd = READ_SENSOR;
 			r.len = 2;
@@ -128,10 +127,10 @@ void server_handle_packet(const Packet *p) {
 			break;
         case READ_CONFIG:
             reg = p->pld[0];
-            val = server_get_reg_value(reg);
+            mt6701_val = server_get_reg_value(reg);
             pld[0] = reg;
-            pld[1] = (uint8_t)(val >> 8);
-			pld[2] = (uint8_t)(val & 0xFF);
+            pld[1] = (uint8_t)(mt6701_val >> 8);
+            pld[2] = (uint8_t)(mt6701_val & 0xFF);
 
             r.cmd = READ_CONFIG;
             r.len = 3;
@@ -141,9 +140,20 @@ void server_handle_packet(const Packet *p) {
             break;
         case WRITE_CONFIG:
             reg = p->pld[0];
-            val = ((uint16_t)(p->pld[1]) << 8) | p->pld[2];
+            mt6701_val = ((uint16_t)(p->pld[1]) << 8) | p->pld[2];
 
-            server_set_reg_value(reg, val);
+            server_set_reg_value(reg, mt6701_val);
+            break;
+        case READ_VBUS: {
+            double val = ina228_read_vbus();
+            memcpy(pld, &val, 8);
+
+            r.cmd = READ_VBUS;
+            r.len = 8;
+            r.pld = pld;
+
+            server_send_packet(&r);
+        } break;
 	}
 }
 
@@ -197,7 +207,7 @@ void app_main(void) {
 
     ESP_ERROR_CHECK(uart_set_pin(UART_PORT, 1, 3, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
-    i2c_mt6701_init(&bus_handle, &dev_handle);
+    i2c_init();
 
     xTaskCreate(uart_event_task, "uart_event_task", 4096, NULL, configMAX_PRIORITIES / 2, NULL);
 }
