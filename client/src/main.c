@@ -105,7 +105,7 @@ double client_convert_reg_value(uint8_t reg, uint16_t val) {
             return val * 0.078;
     }
     return 0;
-}
+} 
 
 // handles received packets; invalid packets are ignored
 void client_handle_packet(const Packet *p) {
@@ -319,97 +319,6 @@ int main(void) {
     }
 
     free(line);
-    close(fd);
-    return 0;
-}
-
-
-int bonkers(void) {
-    int fd = open_serial("/dev/ttyUSB0", B115200);
-    if (fd < 0) { perror("open_serial"); return 1; }
-
-    uint8_t buf_arr[4096];
-    uint8_t *buf = NULL;
-    uint8_t pld[3];
-    ssize_t buf_len = 0;
-    Packet p = { .hdr = PKT_HDR };
-
-    while (1) {
-        int c = getchar();
-        if (c == '\n') {
-            printf ("Trying to receive packets..\n");
-            buf = &buf_arr[0];
-            buf_len = read(fd, buf, 4069);
-            if (buf_len < 5) continue;
-
-            // while buffer contains enough data for potential packet, try to parse it
-            while (buf_len >= 5) {
-                Packet r;
-                size_t decoded_len;
-                // if not a valid packet, advance pointer by 1 byte and try again
-                if (buf[0] != PKT_HDR || !(decoded_len = decode_packet(buf, buf_len, &r))) {
-                    buf++;
-                    buf_len--;
-                    continue;
-                }
-                client_handle_packet(&r);
-
-                buf += decoded_len;
-                buf_len -= decoded_len;
-            }
-        }
-        // probably an easier and better way would be to just write the code of the command and a register into stdin
-        else if (c == 'a') {
-            printf ("Trying to send angle read request..\n");
-
-	        p.cmd = READ_SENSOR,
-            p.len = 0;
-
-            client_send_packet(fd, &p);
-        }
-        else if (c == 'r') {
-            printf ("Trying to send ABZ_RES read request..\n");
-            pld[0] = ABZ_RES;
-
-	        p.cmd = READ_CONFIG;
-            p.len = 1;
-	        p.pld = &pld[0];
-
-            client_send_packet(fd, &p);
-        }
-        else if (c == 'u') {
-            printf ("Trying to send UVW_MUX read request..\n");
-            pld[0] = UVW_MUX;
-
-	        p.cmd = READ_CONFIG;
-            p.len = 1;
-	        p.pld = &pld[0];
-
-            client_send_packet(fd, &p);
-        }
-        else if (c == 'h') {
-            printf ("Trying to send HYST read request..\n");
-            pld[0] = HYST;
-
-	        p.cmd = READ_CONFIG;
-            p.len = 1;
-	        p.pld = &pld[0];
-
-            client_send_packet(fd, &p);;
-        }
-        else if (c == 'H') {
-            printf ("Trying to send HYST write request..\n");
-            pld[0] = HYST;
-            pld[1] = 0;
-            pld[2] = 0x05;
-
-	        p.cmd = WRITE_CONFIG;
-            p.len = 3;
-	        p.pld = &pld[0];
-
-            client_send_packet(fd, &p);
-        }
-    }
     close(fd);
     return 0;
 }
