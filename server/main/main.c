@@ -154,6 +154,46 @@ void server_handle_packet(const Packet *p) {
 
             server_send_packet(&r);
         } break;
+        case READ_DIETEMP: {
+            double val = ina228_read_dietemp();
+            memcpy(pld, &val, 8);
+
+            r.cmd = READ_DIETEMP;
+            r.len = 8;
+            r.pld = pld;
+
+            server_send_packet(&r);
+        } break;
+        case READ_VSHUNT: {
+            double val = ina228_read_vshunt();
+            memcpy(pld, &val, 8);
+
+            r.cmd = READ_VSHUNT;
+            r.len = 8;
+            r.pld = pld;
+
+            server_send_packet(&r);
+        } break;
+        case READ_CURRENT: {
+            double val = ina228_read_current();
+            memcpy(pld, &val, 8);
+
+            r.cmd = READ_CURRENT;
+            r.len = 8;
+            r.pld = pld;
+
+            server_send_packet(&r);
+        } break;
+        case READ_POWER: {
+            double val = ina228_read_power();
+            memcpy(pld, &val, 8);
+
+            r.cmd = READ_POWER;
+            r.len = 8;
+            r.pld = pld;
+
+            server_send_packet(&r);
+        } break;
 	}
 }
 

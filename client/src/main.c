@@ -21,7 +21,7 @@ bool client_send_packet(int fd, const Packet *p) {
 	buf[buf_len - 2] = (uint8_t)(cksum >> 8);
 	buf[buf_len - 1] = (uint8_t)(cksum & 0xFF);
 
-    printf("Sending packet...\n");
+    //printf("Sending packet...\n");
 	ssize_t n = write(fd, buf, buf_len);
     if (n < 0) {
         perror("write");
@@ -128,10 +128,26 @@ void client_handle_packet(const Packet *p) {
             val = client_convert_reg_value(reg, code);
             printf("CLIENT RECEIVED REG_VALUE of 0x%02X: %.3f (0x%04X)\n", reg, val, code);
 		    break;
-        case READ_VBUS:
+        case READ_VBUS: {
             memcpy(&val, p->pld, p->len);
             printf("CLIENT RECEIVED VBUS: %.3f\n", val);
-            break;
+        } break;
+        case READ_DIETEMP: {
+            memcpy(&val, p->pld, p->len);
+            printf("CLIENT RECEIVED DIETEMP: %.3f\n", val);
+        } break;
+        case READ_VSHUNT: {
+            memcpy(&val, p->pld, p->len);
+            printf("CLIENT RECEIVED VSHUNT: %.3f\n", val);
+        } break;
+        case READ_CURRENT: {
+            memcpy(&val, p->pld, p->len);
+            printf("CLIENT RECEIVED CURRENT: %.3f\n", val);
+        } break;
+        case READ_POWER: {
+            memcpy(&val, p->pld, p->len);
+            printf("CLIENT RECEIVED POWER: %.3f\n", val);
+        } break;
 	}
 }
 
@@ -243,6 +259,7 @@ int main(void) {
     uint8_t pld[3];
     ssize_t buf_len = 0;
     Packet p = { .hdr = PKT_HDR };
+    bool auto_send = false;
 
     while (1) {
         printf("[mt6701]> ");
@@ -262,7 +279,6 @@ int main(void) {
             printf ("Trying to receive packets..\n");
             buf = &buf_arr[0];
             buf_len = read(fd, buf, 4069);
-            if (buf_len < 5) continue;
 
             // while buffer contains enough data for potential packet, try to parse it
             while (buf_len >= 5) {
@@ -278,6 +294,14 @@ int main(void) {
 
                 buf += decoded_len;
                 buf_len -= decoded_len;
+            }
+
+            if (auto_send) {
+	            p.cmd = READ_SENSOR,
+                p.len = 0;
+                client_send_packet(fd, &p);
+                p.cmd = READ_VBUS;
+                client_send_packet(fd, &p);
             }
             continue;
         }
@@ -322,6 +346,34 @@ int main(void) {
                 p.len = 0;
 
                 client_send_packet(fd, &p);
+            }
+            else if (sv_scmp(cmd, "dietemp")) {
+                p.cmd = READ_DIETEMP;
+                p.len = 0;
+
+                client_send_packet(fd, &p);
+            }
+            else if (sv_scmp(cmd, "vshunt")) {
+                p.cmd = READ_VSHUNT;
+                p.len = 0;
+
+                client_send_packet(fd, &p);
+            }
+            else if (sv_scmp(cmd, "curr")) {
+                p.cmd = READ_CURRENT;
+                p.len = 0;
+
+                client_send_packet(fd, &p);
+            }
+            else if (sv_scmp(cmd, "pow")) {
+                p.cmd = READ_POWER;
+                p.len = 0;
+
+                client_send_packet(fd, &p);
+            }
+            else if (sv_scmp(cmd, "auto")) {
+                auto_send = !auto_send;
+                printf("Toggle auto send: %d\n", auto_send);
             }
         }
     }
