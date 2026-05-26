@@ -21,6 +21,7 @@ bool client_send_packet(int fd, const Packet *p) {
 	buf[buf_len - 2] = (uint8_t)(cksum >> 8);
 	buf[buf_len - 1] = (uint8_t)(cksum & 0xFF);
 
+    printf("Sending packet...\n");
 	ssize_t n = write(fd, buf, buf_len);
     if (n < 0) {
         perror("write");
@@ -127,6 +128,10 @@ void client_handle_packet(const Packet *p) {
             val = client_convert_reg_value(reg, code);
             printf("CLIENT RECEIVED REG_VALUE of 0x%02X: %.3f (0x%04X)\n", reg, val, code);
 		    break;
+        case READ_VBUS:
+            memcpy(&val, p->pld, p->len);
+            printf("CLIENT RECEIVED VBUS: %.3f\n", val);
+            break;
 	}
 }
 
@@ -285,7 +290,6 @@ int main(void) {
 	            p.cmd = READ_SENSOR,
                 p.len = 0;
 
-                printf("Sending packet...\n");
                 client_send_packet(fd, &p);
             }
             else if (sv_scmp(cmd, "reg")) {
@@ -297,7 +301,6 @@ int main(void) {
                 p.len = 1;
 	            p.pld = &pld[0];
 
-                printf("Sending packet...\n");
                 client_send_packet(fd, &p);
             }
             else if (sv_scmp(cmd, "wreg")) {
@@ -312,7 +315,12 @@ int main(void) {
                 p.len = 3;
 	            p.pld = &pld[0];
 
-                printf("Sending packet...\n");
+                client_send_packet(fd, &p);
+            }
+            else if (sv_scmp(cmd, "vbus")) {
+                p.cmd = READ_VBUS;
+                p.len = 0;
+
                 client_send_packet(fd, &p);
             }
         }

@@ -9,7 +9,7 @@
 static const size_t tx_rx_buf_len = 512;
 static const uint8_t PKT_HDR = 0xAA;
 static const uint8_t MIN_PKT_LEN = 5;
-static const uint8_t MAX_PKT_LEN = 9;
+static const uint8_t MAX_PKT_LEN = 13;
 static const uint8_t MAX_PLD_LEN = 8;
 
 // packet types / commands
